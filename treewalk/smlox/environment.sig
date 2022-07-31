@@ -9,7 +9,9 @@ signature ENVIRONMENT =
     val declare : t -> (string * LoxValue.t) -> unit
     val get : t -> string -> LoxValue.t
     val assign : t -> (string * LoxValue.t) -> unit
+    val isGlobal : t -> bool
 
     val getJumps : t -> string -> int
     val getFrom : t -> string -> int -> LoxValue.t
+    val assignTo : t -> (string * LoxValue.t) -> int -> unit
   end

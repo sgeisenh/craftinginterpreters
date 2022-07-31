@@ -7,9 +7,13 @@ structure Interpreter =
     fun evaluateExpr environment expr =
       let val {value = expr, ...} = expr in
         case expr of
-          Assign (ident, expr) =>
+          Assign ((ident, level), expr) =>
             let val result = evaluateExpr environment expr in
-              Environment.assign environment (ident, result); result
+              (case level of
+                 NONE => Environment.assign environment (ident, result)
+               | SOME level =>
+                   Environment.assignTo environment (ident, result) level);
+              result
             end
         | Binary (binOp, left, right) =>
             let
@@ -50,7 +54,10 @@ structure Interpreter =
                 Bang => LoxValue.logicalNot expr'
               | Negative => LoxValue.negate expr'
             end
-        | Variable(ident, binding) => Environment.get environment ident
+        | Variable (ident, binding) =>
+            (case binding of
+               NONE => Environment.get environment ident
+             | SOME level => Environment.getFrom environment ident level)
         | Logical (Parser.Or, left, right) =>
             let val left = evaluateExpr environment left in
               if LoxValue.isTruthy left then

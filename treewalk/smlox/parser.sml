@@ -20,7 +20,7 @@ structure Parser :> PARSER =
     datatype logical_operator = And | Or
     datatype unary_operator = Negative | Bang
     datatype expr =
-      Assign of (string * expr annotated)
+      Assign of ((string * int option) * expr annotated)
     | Binary of (binary_operator * expr annotated * expr annotated)
     | Call of (expr annotated * expr annotated list)
     | Grouping of expr annotated
@@ -97,11 +97,11 @@ structure Parser :> PARSER =
             end
       end
 
-    fun printTokens (tokens : Scanner.token annotated list)= (
-      print "Tokens: \n";
-      List.app print (map (fn { value, ... } => Scanner.tokenToString value ^
-      "\n")
-      tokens))
+    fun printTokens (tokens : Scanner.token annotated list) =
+      ( print "Tokens: \n"
+      ; List.app print
+          (map (fn {value, ...} => Scanner.tokenToString value ^ "\n") tokens)
+      )
 
     fun parse tokens =
       let val statements = parseStatements tokens in
@@ -109,7 +109,7 @@ structure Parser :> PARSER =
       end
     and parseStatements tokens = parseStatements' (tokens, [])
     and parseStatements' (tokens, acc) =
-       case tokens of
+      case tokens of
         [] => List.rev acc
       | [{value = Scanner.Eof, ...}] => List.rev acc
       | _ =>
@@ -367,25 +367,25 @@ structure Parser :> PARSER =
           end
       | _ => raise Fail "unreachable"
     and parseBlock tokens =
-      case tokens of 
-           { location = lBraceLocation, ... } :: tokens => let
-        val (blockVal, rBraceLocation, tokens) = parseBlock' tokens []
-      in
-        ({ value = blockVal, location = merge_locations [lBraceLocation,
-        rBraceLocation] }, tokens)
-      end
-         | _ => raise Fail "unreachable"
+      case tokens of
+        {location = lBraceLocation, ...} :: tokens =>
+          let val (blockVal, rBraceLocation, tokens) = parseBlock' tokens [] in
+            ( { value = blockVal
+              , location = merge_locations [lBraceLocation, rBraceLocation]
+              }
+            , tokens
+            )
+          end
+      | _ => raise Fail "unreachable"
     and parseBlock' tokens acc =
-          case tokens of
-             [] => raise Fail "Expect '}' after block."
-           | {value = Scanner.RightBrace, location = rBraceLocation} :: tokens =>
-               (Block (List.rev acc), rBraceLocation,
-               tokens
-               )
-           | _ =>
-               let val (statement, tokens) = parseStatement tokens in
-                 parseBlock' tokens (statement :: acc)
-               end
+      case tokens of
+        [] => raise Fail "Expect '}' after block."
+      | {value = Scanner.RightBrace, location = rBraceLocation} :: tokens =>
+          (Block (List.rev acc), rBraceLocation, tokens)
+      | _ =>
+          let val (statement, tokens) = parseStatement tokens in
+            parseBlock' tokens (statement :: acc)
+          end
     and parseExpressionStatement tokens =
       let
         val (expr, tokens) = parseExpression tokens
@@ -416,8 +416,8 @@ structure Parser :> PARSER =
               val {location = valueLocation, ...} = value
             in
               case left of
-                {value = Variable(ident, _), ...} =>
-                  ( { value = Assign (ident, value)
+                {value = Variable (ident, _), ...} =>
+                  ( { value = Assign ((ident, NONE), value)
                     , location = merge_locations [leftLocation, valueLocation]
                     }
                   , tokens
@@ -558,6 +558,9 @@ structure Parser :> PARSER =
               end
           | {value = Scanner.Identifier ident, location} =>
               ({value = Variable (ident, NONE), location = location}, tokens)
-          | _ => raise Fail ("Expect expression but found " ^
-          Scanner.tokenToString (#value token))
+          | _ =>
+              raise
+                Fail
+                  ("Expect expression but found " ^ Scanner.tokenToString
+                                                      (# value token))
   end

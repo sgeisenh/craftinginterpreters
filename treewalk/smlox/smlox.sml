@@ -15,9 +15,12 @@ fun run environment program =
     val scanner = Scanner.make program
     val tokensOrErrors = Scanner.scanTokens scanner
     val astOrErrors = bind Parser.parse tokensOrErrors
+    val boundGlobalNames = map (fn (name, _) => name) globals
+    val boundAstOrErrors =
+      bind (Binding.attachBindings boundGlobalNames) astOrErrors
     val successOrFailure =
       bind (fn ast => Success (Interpreter.interpret environment ast))
-        astOrErrors
+        boundAstOrErrors
   in
     case successOrFailure of
       Failure errors => Common.print_errors program errors

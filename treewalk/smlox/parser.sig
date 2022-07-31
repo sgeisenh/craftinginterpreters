@@ -16,7 +16,7 @@ signature PARSER =
     datatype logical_operator = And | Or
     datatype unary_operator = Negative | Bang
     datatype expr =
-      Assign of (string * expr Common.annotated)
+      Assign of ((string * int option) * expr Common.annotated)
     | Binary of
                (binary_operator * expr Common.annotated * expr Common.annotated)
     | Call of (expr Common.annotated * (expr Common.annotated) list)
