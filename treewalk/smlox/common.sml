@@ -8,18 +8,19 @@ structure Common :> COMMON =
       | Failure failure => Failure failure
 
     type source_position = {line : int, offset : int}
+    type source_range = {start : source_position, finish : source_position}
+    datatype source_location =
+    Position of source_position | Range of source_range
 
-    type error = {description : string, source_position : source_position}
+    type error = {description : string, source_location : source_location}
 
     fun repeat (c, n) = String.implode (List.tabulate (n, fn _ => c))
 
-    fun render_error source {description, source_position} =
+    fun render_position_context source position =
       let
-        val {line, offset} = source_position
+        val {line, offset} = position
         val preamble =
-          "SMLox encountered an error: "
-          ^ description
-          ^ "\nLine: "
+          "Line: "
           ^ Int.toString line
           ^ " Offset: "
           ^ Int.toString offset
@@ -49,6 +50,18 @@ structure Common :> COMMON =
           , String.concat linesAfter
           ]
       end
+
+    fun render_error source {description, source_location} =
+      let
+        val context =
+          case source_location of
+            Position position => render_position_context source position
+          | Range range => "Not implemented yet."
+      (* TODO *)
+      in
+        description ^ "\n" ^ context
+      end
+
     fun print_errors source errors =
       let
         val messages = map (render_error source) errors

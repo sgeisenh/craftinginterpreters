@@ -41,10 +41,12 @@ signature SCANNER =
     | While
     | Eof
 
+    type annotatedToken = {token : token, location : Common.source_location}
+
     val tokenEqual : (token * token) -> bool
     val tokenToString : token -> string
 
     type t
     val make : string -> t
-    val scanTokens : t -> (token list, Common.error list) Common.result
+    val scanTokens : t -> (annotatedToken list, Common.error list) Common.result
   end

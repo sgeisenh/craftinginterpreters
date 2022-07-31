@@ -1,5 +1,7 @@
 structure Parser :> PARSER =
   struct
+    exception UnexpectedToken of (string * Scanner.annotatedToken)
+
     datatype literal = Number of real | String of string | True | False | Nil
     datatype binary_operator =
       Dot
@@ -110,7 +112,8 @@ structure Parser :> PARSER =
           else
             NONE
 
-    fun tokenToBinop token =
+    fun tokenToBinop annToken =
+    let val {token, location} = annToken in 
       case token of
         Scanner.Minus => Minus
       | Scanner.Plus => Plus
@@ -122,13 +125,16 @@ structure Parser :> PARSER =
       | Scanner.GreaterEqual => GreaterEqual
       | Scanner.Less => Less
       | Scanner.LessEqual => LessEqual
-      | _ => raise Fail "Unknown binary operator token"
+      | _ => raise UnexpectedToken ("non-logical binary operator", annToken)
+    end
 
-    fun tokenToUnop token =
+    fun tokenToUnop annToken =
+    let val {token, location} = annToken in
       case token of
         Scanner.Minus => Negative
       | Scanner.Bang => Bang
-      | _ => raise Fail "Unknown unary operator token"
+      | _ => raise UnexpectedToken ("unary operator", annToken)
+    end
 
     fun parseBinaryLevel types next tokens =
       let val (left, tokens') = next (tokens) in
@@ -143,7 +149,13 @@ structure Parser :> PARSER =
             end
       end
 
-    fun parse tokens = Common.Success(parseStatements tokens)
+    fun parse tokens =
+      let
+        val tokens = map (fn {token, location} => token) tokens
+        val statements = parseStatements tokens
+      in
+        Common.Success statements
+      end
     and parseStatements tokens = parseStatements' (tokens, [])
     and parseStatements' (tokens, acc) =
       case tokens of

@@ -43,6 +43,8 @@ structure Scanner :> SCANNER =
     | While
     | Eof
 
+    type annotatedToken = {location : Common.source_location, token : token}
+
     fun tokenEqual (left, right) =
       case left of
         LeftParen =>
@@ -246,7 +248,7 @@ structure Scanner :> SCANNER =
 
     type t =
       { source : char list
-      , tokens : token list
+      , tokens : annotatedToken list
       , errors : Common.error list
       , line : int
       , offset : int
@@ -324,13 +326,22 @@ structure Scanner :> SCANNER =
     fun scanToken scanner =
       let
         val {source, tokens, errors, line, offset} = scanner
+        val start = {line = line, offset = offset}
         fun addToken (token, newSource, offsetDelta) =
-          { source = newSource
-          , tokens = token :: tokens
-          , errors = errors
-          , line = line
-          , offset = offset + offsetDelta
-          }
+          let
+            val location =
+              Common.Range
+                { start = start
+                , finish = {line = line, offset = offset + offsetDelta}
+                }
+          in
+            { source = newSource
+            , tokens = {location = location, token = token} :: tokens
+            , errors = errors
+            , line = line
+            , offset = offset + offsetDelta
+            }
+          end
         fun newLine newSource =
           { source = newSource
           , tokens = tokens
@@ -348,15 +359,19 @@ structure Scanner :> SCANNER =
         fun addString (contents, newSource) =
           let
             val str = String.implode contents
-            val strLines = String.tokens (fn c => c = #"\n") str
-            val offset = 2 + offset + String.size (List.last strLines)
+            val strLines = String.fields (fn c => c = #"\n") str
+            val newLine =
+              line + List.length (List.filter (fn c => c = #"\n") contents)
+            val newOffset = 2 + offset + String.size (List.last strLines)
+            val location =
+              Common.Range
+                {start = start, finish = {line = newLine, offset = newOffset}}
           in
             { source = newSource
-            , tokens = String str :: tokens
+            , tokens = {location = location, token = String str} :: tokens
             , errors = errors
-            , line =
-                line + List.length (List.filter (fn c => c = #"\n") contents)
-            , offset = offset
+            , line = newLine
+            , offset = newOffset
             }
           end
         fun addIdentifier () =
@@ -366,9 +381,12 @@ structure Scanner :> SCANNER =
             val token =
               getOpt ((get keywords identifier), Identifier identifier)
             val newOffset = offset + String.size identifier
+            val location =
+              Common.Range
+                {start = start, finish = {line = line, offset = newOffset}}
           in
             { source = tl
-            , tokens = token :: tokens
+            , tokens = {location = location, token = token} :: tokens
             , errors = errors
             , line = line
             , offset = newOffset
@@ -389,10 +407,14 @@ structure Scanner :> SCANNER =
               | _ => ([], tl)
             val numberString =
               String.implode integer ^ String.implode fractional
-            val number = Number (valOf (Real.fromString numberString))
+            val token = Number (valOf (Real.fromString numberString))
+            val newOffset = offset + String.size numberString
+            val location =
+              Common.Range
+                {start = start, finish = {line = line, offset = newOffset}}
           in
             { source = tl
-            , tokens = number :: tokens
+            , tokens = {location = location, token = token} :: tokens
             , errors = errors
             , line = line
             , offset = offset + String.size numberString
@@ -403,7 +425,7 @@ structure Scanner :> SCANNER =
           , tokens = tokens
           , errors =
               { description = msg
-              , source_position = {line = line, offset = offset}
+              , source_location = Common.Position {line = line, offset = offset}
               } :: errors
           , line = line
           , offset = offset
@@ -453,13 +475,20 @@ structure Scanner :> SCANNER =
 
     fun scanTokens scanner =
       let
-        fun createResult {tokens, errors, ...} =
+        fun createResult {tokens, errors, line, offset, ...} =
           case errors of
-            [] => Success (List.rev (Eof :: tokens))
+            [] =>
+              Success
+                (List.rev
+                   ({ location = Common.Position {line = line, offset = offset}
+                    , token = Eof
+                    } :: tokens))
           | _ => Failure (List.rev errors)
+        val tokens =
+          case scanner of
+            {source = [], ...} => createResult scanner
+          | _ => scanTokens (scanToken scanner)
       in
-        case scanner of
-          {source = [], ...} => createResult scanner
-        | _ => scanTokens (scanToken scanner)
+        tokens
       end
   end
