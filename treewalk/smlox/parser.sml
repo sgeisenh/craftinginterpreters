@@ -143,7 +143,7 @@ structure Parser :> PARSER =
             end
       end
 
-    fun parse tokens = parseStatements tokens
+    fun parse tokens = Common.Success(parseStatements tokens)
     and parseStatements tokens = parseStatements' (tokens, [])
     and parseStatements' (tokens, acc) =
       case tokens of

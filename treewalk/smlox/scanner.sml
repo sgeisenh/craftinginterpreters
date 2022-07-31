@@ -244,12 +244,21 @@ structure Scanner :> SCANNER =
       | While => "While"
       | Eof => "Eof"
 
-    type error = {message : string, line : int}
     type t =
-      {source : char list, tokens : token list, errors : error list, line : int}
+      { source : char list
+      , tokens : token list
+      , errors : Common.error list
+      , line : int
+      , offset : int
+      }
 
     fun make program =
-      {source = String.explode program, tokens = [], errors = [], line = 1}
+      { source = String.explode program
+      , tokens = []
+      , errors = []
+      , line = 1
+      , offset = 1
+      }
 
     fun dropWhile f [] = []
       | dropWhile f (x :: xs) = if f x then dropWhile f xs else x :: xs
@@ -314,38 +323,55 @@ structure Scanner :> SCANNER =
 
     fun scanToken scanner =
       let
-        val {source, tokens, errors, line} = scanner
-        fun addToken (token, newSource) =
+        val {source, tokens, errors, line, offset} = scanner
+        fun addToken (token, newSource, offsetDelta) =
           { source = newSource
           , tokens = token :: tokens
           , errors = errors
           , line = line
+          , offset = offset + offsetDelta
           }
-        fun newLines (newSource, numLines) =
+        fun newLine newSource =
           { source = newSource
           , tokens = tokens
           , errors = errors
-          , line = line + numLines
+          , line = line + 1
+          , offset = 1
           }
-        fun withNewSource newSource =
-          {source = newSource, tokens = tokens, errors = errors, line = line}
-        fun addString (contents, newSource) =
+        fun withNewSource (newSource, offset) =
           { source = newSource
-          , tokens = String (String.implode contents) :: tokens
+          , tokens = tokens
           , errors = errors
-          , line = line + List.length (List.filter (fn c => c = #"\n") contents)
+          , line = line
+          , offset = offset
           }
+        fun addString (contents, newSource) =
+          let
+            val str = String.implode contents
+            val strLines = String.tokens (fn c => c = #"\n") str
+            val offset = 2 + offset + String.size (List.last strLines)
+          in
+            { source = newSource
+            , tokens = String str :: tokens
+            , errors = errors
+            , line =
+                line + List.length (List.filter (fn c => c = #"\n") contents)
+            , offset = offset
+            }
+          end
         fun addIdentifier () =
           let
             val (contents, tl) = splitWhile isAlphaNumeric source
             val identifier = String.implode contents
             val token =
               getOpt ((get keywords identifier), Identifier identifier)
+            val newOffset = offset + String.size identifier
           in
             { source = tl
             , tokens = token :: tokens
             , errors = errors
             , line = line
+            , offset = newOffset
             }
           end
         fun addNumber () =
@@ -361,51 +387,54 @@ structure Scanner :> SCANNER =
                       (#"." :: fractional, tl')
                     end
               | _ => ([], tl)
-            val number =
-              Number
-                (valOf
-                   (Real.fromString
-                      (String.implode integer ^ String.implode fractional)))
+            val numberString =
+              String.implode integer ^ String.implode fractional
+            val number = Number (valOf (Real.fromString numberString))
           in
             { source = tl
             , tokens = number :: tokens
             , errors = errors
             , line = line
+            , offset = offset + String.size numberString
             }
           end
         fun error (msg, newSource) =
           { source = newSource
           , tokens = tokens
-          , errors = {message = msg, line = line} :: errors
+          , errors =
+              { description = msg
+              , source_position = {line = line, offset = offset}
+              } :: errors
           , line = line
+          , offset = offset
           }
       in
         case source of
-          #"(" :: newSource => addToken (LeftParen, newSource)
-        | #")" :: newSource => addToken (RightParen, newSource)
-        | #"{" :: newSource => addToken (LeftBrace, newSource)
-        | #"}" :: newSource => addToken (RightBrace, newSource)
-        | #"," :: newSource => addToken (Comma, newSource)
-        | #"." :: newSource => addToken (Dot, newSource)
-        | #"-" :: newSource => addToken (Minus, newSource)
-        | #"+" :: newSource => addToken (Plus, newSource)
-        | #";" :: newSource => addToken (Semicolon, newSource)
-        | #"*" :: newSource => addToken (Star, newSource)
+          #"(" :: newSource => addToken (LeftParen, newSource, 1)
+        | #")" :: newSource => addToken (RightParen, newSource, 1)
+        | #"{" :: newSource => addToken (LeftBrace, newSource, 1)
+        | #"}" :: newSource => addToken (RightBrace, newSource, 1)
+        | #"," :: newSource => addToken (Comma, newSource, 1)
+        | #"." :: newSource => addToken (Dot, newSource, 1)
+        | #"-" :: newSource => addToken (Minus, newSource, 1)
+        | #"+" :: newSource => addToken (Plus, newSource, 1)
+        | #";" :: newSource => addToken (Semicolon, newSource, 1)
+        | #"*" :: newSource => addToken (Star, newSource, 1)
         | #"/" :: #"/" :: tl =>
-            withNewSource (dropWhile (fn c => c <> #"\n") tl)
-        | #"/" :: newSource => addToken (Slash, newSource)
-        | #"!" :: #"=" :: newSource => addToken (BangEqual, newSource)
-        | #"!" :: newSource => addToken (Bang, newSource)
-        | #"=" :: #"=" :: newSource => addToken (EqualEqual, newSource)
-        | #"=" :: newSource => addToken (Equal, newSource)
-        | #"<" :: #"=" :: newSource => addToken (LessEqual, newSource)
-        | #"<" :: newSource => addToken (Less, newSource)
-        | #">" :: #"=" :: newSource => addToken (GreaterEqual, newSource)
-        | #">" :: newSource => addToken (Greater, newSource)
-        | #" " :: newSource => withNewSource newSource
-        | #"\r" :: newSource => withNewSource newSource
-        | #"\t" :: newSource => withNewSource newSource
-        | #"\n" :: newSource => newLines (newSource, 1)
+            withNewSource (dropWhile (fn c => c <> #"\n") tl, 0)
+        | #"/" :: newSource => addToken (Slash, newSource, 1)
+        | #"!" :: #"=" :: newSource => addToken (BangEqual, newSource, 2)
+        | #"!" :: newSource => addToken (Bang, newSource, 1)
+        | #"=" :: #"=" :: newSource => addToken (EqualEqual, newSource, 2)
+        | #"=" :: newSource => addToken (Equal, newSource, 1)
+        | #"<" :: #"=" :: newSource => addToken (LessEqual, newSource, 2)
+        | #"<" :: newSource => addToken (Less, newSource, 1)
+        | #">" :: #"=" :: newSource => addToken (GreaterEqual, newSource, 2)
+        | #">" :: newSource => addToken (Greater, newSource, 1)
+        | #" " :: newSource => withNewSource (newSource, offset + 1)
+        | #"\r" :: newSource => withNewSource (newSource, offset + 1)
+        | #"\t" :: newSource => withNewSource (newSource, offset + 1)
+        | #"\n" :: newSource => newLine newSource
         | #"\"" :: tl =>
             let val (contents, tl) = splitWhile (fn c => c <> #"\"") tl in
               case tl of
@@ -418,13 +447,13 @@ structure Scanner :> SCANNER =
             else if isDigit c then
               addNumber ()
             else
-              error ("Unexpected character.", tl)
+              error ("Unexpected character: " ^ String.str c ^ ".", tl)
         | [] => error ("Empty source.", [])
       end
 
     fun scanTokens scanner =
       let
-        fun createResult {source, tokens, errors, line} =
+        fun createResult {tokens, errors, ...} =
           case errors of
             [] => Success (List.rev (Eof :: tokens))
           | _ => Failure (List.rev errors)

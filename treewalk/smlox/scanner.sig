@@ -45,8 +45,6 @@ signature SCANNER =
     val tokenToString : token -> string
 
     type t
-    type error = {message : string, line : int}
-
     val make : string -> t
-    val scanTokens : t -> (token list, error list) Common.result
+    val scanTokens : t -> (token list, Common.error list) Common.result
   end

@@ -14,24 +14,14 @@ fun run environment program =
   let
     val scanner = Scanner.make program
     val tokensOrErrors = Scanner.scanTokens scanner
-    val justTokens =
-      case tokensOrErrors of
-        Success tokens => tokens
-      | Failure failures =>
-          ( (app
-               (fn {message, line} =>
-                  print
-                    ("Error on line "
-                     ^ Int.toString line
-                     ^ ": "
-                     ^ message
-                     ^ "\n"))
-               failures)
-          ; raise Fail "Scanning error."
-          )
-    val ast = Parser.parse justTokens
+    val astOrErrors = bind Parser.parse tokensOrErrors
+    val successOrFailure =
+      bind (fn ast => Success (Interpreter.interpret environment ast))
+        astOrErrors
   in
-    Interpreter.interpret environment ast
+    case successOrFailure of
+      Failure errors => Common.print_errors program errors
+    | _ => ()
   end
 
 fun runFile filename =

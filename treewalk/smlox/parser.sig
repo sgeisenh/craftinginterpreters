@@ -39,5 +39,5 @@ signature PARSER =
     val literalToString : literal -> string
     val exprToString : expr -> string
 
-    val parse : Scanner.token list -> statement list
+    val parse : Scanner.token list -> (statement list, Common.error list) Common.result
   end
