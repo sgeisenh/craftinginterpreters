@@ -1,6 +1,6 @@
 structure Parser :> PARSER =
   struct
-    exception UnexpectedToken of (string * Scanner.annotatedToken)
+    exception UnexpectedToken of (string * Scanner.token Common.annotated)
 
     datatype literal = Number of real | String of string | True | False | Nil
     datatype binary_operator =
@@ -107,34 +107,37 @@ structure Parser :> PARSER =
       case tokens of
         [] => NONE
       | token :: tokens' =>
-          if List.exists (fn typ => Scanner.tokenEqual (typ, token)) types then
+          if
+            List.exists (fn typ => Scanner.tokenEqual (typ, # value token))
+              types
+          then
             SOME (token, tokens')
           else
             NONE
 
     fun tokenToBinop annToken =
-    let val {token, location} = annToken in 
-      case token of
-        Scanner.Minus => Minus
-      | Scanner.Plus => Plus
-      | Scanner.Slash => Slash
-      | Scanner.Star => Star
-      | Scanner.BangEqual => BangEqual
-      | Scanner.EqualEqual => EqualEqual
-      | Scanner.Greater => Greater
-      | Scanner.GreaterEqual => GreaterEqual
-      | Scanner.Less => Less
-      | Scanner.LessEqual => LessEqual
-      | _ => raise UnexpectedToken ("non-logical binary operator", annToken)
-    end
+      let val {value, location} = annToken in
+        case value of
+          Scanner.Minus => Minus
+        | Scanner.Plus => Plus
+        | Scanner.Slash => Slash
+        | Scanner.Star => Star
+        | Scanner.BangEqual => BangEqual
+        | Scanner.EqualEqual => EqualEqual
+        | Scanner.Greater => Greater
+        | Scanner.GreaterEqual => GreaterEqual
+        | Scanner.Less => Less
+        | Scanner.LessEqual => LessEqual
+        | _ => raise UnexpectedToken ("non-logical binary operator", annToken)
+      end
 
     fun tokenToUnop annToken =
-    let val {token, location} = annToken in
-      case token of
-        Scanner.Minus => Negative
-      | Scanner.Bang => Bang
-      | _ => raise UnexpectedToken ("unary operator", annToken)
-    end
+      let val {value, location} = annToken in
+        case value of
+          Scanner.Minus => Negative
+        | Scanner.Bang => Bang
+        | _ => raise UnexpectedToken ("unary operator", annToken)
+      end
 
     fun parseBinaryLevel types next tokens =
       let val (left, tokens') = next (tokens) in
@@ -150,42 +153,40 @@ structure Parser :> PARSER =
       end
 
     fun parse tokens =
-      let
-        val tokens = map (fn {token, location} => token) tokens
-        val statements = parseStatements tokens
-      in
+      let val statements = parseStatements tokens in
         Common.Success statements
       end
     and parseStatements tokens = parseStatements' (tokens, [])
     and parseStatements' (tokens, acc) =
       case tokens of
         [] => List.rev acc
-      | [Scanner.Eof] => List.rev acc
+      | [{value = Scanner.Eof, ...}] => List.rev acc
       | _ =>
           let val (statement, tokens') = parseStatement tokens in
             parseStatements' (tokens', (statement :: acc))
           end
     and parseStatement tokens =
       case tokens of
-        Scanner.Fun :: tokens => parseFunction ("function", tokens)
-      | Scanner.Var :: tokens' => parseVarDeclaration tokens'
-      | Scanner.For :: tokens' => parseForStatement tokens'
-      | Scanner.If :: tokens' => parseIfStatement tokens'
-      | Scanner.While :: tokens' => parseWhileStatement tokens'
-      | Scanner.Return :: tokens => parseReturnStatement tokens
-      | Scanner.Print :: tokens' => parsePrintStatement tokens'
-      | Scanner.LeftBrace :: tokens' => parseBlock tokens'
+        {value = Scanner.Fun, ...} :: tokens =>
+          parseFunction ("function", tokens)
+      | {value = Scanner.Var, ...} :: tokens' => parseVarDeclaration tokens'
+      | {value = Scanner.For, ...} :: tokens' => parseForStatement tokens'
+      | {value = Scanner.If, ...} :: tokens' => parseIfStatement tokens'
+      | {value = Scanner.While, ...} :: tokens' => parseWhileStatement tokens'
+      | {value = Scanner.Return, ...} :: tokens => parseReturnStatement tokens
+      | {value = Scanner.Print, ...} :: tokens' => parsePrintStatement tokens'
+      | {value = Scanner.LeftBrace, ...} :: tokens' => parseBlock tokens'
       | _ => parseExpressionStatement tokens
     and parseFunction (kind, tokens) =
       case tokens of
-        Scanner.Identifier name :: tokens =>
+        {value = Scanner.Identifier name, ...} :: tokens =>
           (case tokens of
-             Scanner.LeftParen :: tokens =>
+             {value = Scanner.LeftParen, ...} :: tokens =>
                let
                  val (parameters, tokens) = parseParameters tokens
                  val (body, tokens) =
                    case tokens of
-                     Scanner.LeftBrace :: tokens =>
+                     {value = Scanner.LeftBrace, ...} :: tokens =>
                        (case parseBlock tokens of
                           (Block body, tokens) => (body, tokens)
                         | _ => raise Fail "Unreachable.")
@@ -198,26 +199,27 @@ structure Parser :> PARSER =
     and parseParameters tokens = parseParameters' tokens []
     and parseParameters' tokens acc =
       case tokens of
-        Scanner.RightParen :: tokens => (List.rev acc, tokens)
-      | Scanner.Identifier parameter :: tokens =>
+        {value = Scanner.RightParen, ...} :: tokens => (List.rev acc, tokens)
+      | {value = Scanner.Identifier parameter, ...} :: tokens =>
           (case tokens of
-             Scanner.Comma :: tokens =>
+             {value = Scanner.Comma, ...} :: tokens =>
                parseParameters' tokens (parameter :: acc)
-           | Scanner.RightParen :: tokens =>
-               parseParameters' (Scanner.RightParen :: tokens)
+           | {value = Scanner.RightParen, location} :: tokens =>
+               parseParameters'
+                 ({value = Scanner.RightParen, location = location} :: tokens)
                  (parameter :: acc)
            | _ => raise Fail "Only comma or rparen after param")
       | _ => raise Fail "Expect parameter name."
     and parseVarDeclaration tokens =
       case tokens of
-        (Scanner.Identifier ident) :: tokens' =>
+        ({value = Scanner.Identifier ident, ...}) :: tokens' =>
           (case matchTypes [Scanner.Equal] tokens' of
              NONE =>
                let
                  val statement = Var (ident, Literal Nil)
                  val tokens =
                    case tokens' of
-                     Scanner.Semicolon :: tokens => tokens
+                     {value = Scanner.Semicolon, ...} :: tokens => tokens
                    | _ => raise Fail "Expect ';' after variable declaration."
                in
                  (statement, tokens)
@@ -235,12 +237,12 @@ structure Parser :> PARSER =
       | _ => raise Fail "Expect variable name."
     and parseForStatement tokens =
       case tokens of
-        Scanner.LeftParen :: tokens =>
+        {value = Scanner.LeftParen, ...} :: tokens =>
           let
             val (initializer, tokens) =
               case tokens of
-                Scanner.Semicolon :: tokens => (NONE, tokens)
-              | Scanner.Var :: tokens =>
+                {value = Scanner.Semicolon, ...} :: tokens => (NONE, tokens)
+              | {value = Scanner.Var, ...} :: tokens =>
                   let val (initializer, tokens) = parseVarDeclaration tokens in
                     (SOME initializer, tokens)
                   end
@@ -252,25 +254,25 @@ structure Parser :> PARSER =
                   end
             val (condition, tokens) =
               case tokens of
-                Scanner.Semicolon :: _ => (NONE, tokens)
+                {value = Scanner.Semicolon, ...} :: _ => (NONE, tokens)
               | _ =>
                   let val (condition, tokens) = parseExpression tokens in
                     (SOME condition, tokens)
                   end
             val tokens =
               case tokens of
-                Scanner.Semicolon :: tokens => tokens
+                {value = Scanner.Semicolon, ...} :: tokens => tokens
               | _ => raise Fail "Expect ';' after loop condition."
             val (increment, tokens) =
               case tokens of
-                Scanner.RightParen :: _ => (NONE, tokens)
+                {value = Scanner.RightParen, ...} :: _ => (NONE, tokens)
               | _ =>
                   let val (increment, tokens) = parseExpression tokens in
                     (SOME increment, tokens)
                   end
             val tokens =
               case tokens of
-                Scanner.RightParen :: tokens => tokens
+                {value = Scanner.RightParen, ...} :: tokens => tokens
               | _ => raise Fail "Expect ')' after for clauses."
             val (body, tokens) = parseStatement tokens
             val body =
@@ -292,15 +294,15 @@ structure Parser :> PARSER =
       | _ => raise Fail "Expect '(' after 'for'."
     and parseIfStatement tokens =
       case tokens of
-        Scanner.LeftParen :: tokens =>
+        {value = Scanner.LeftParen, ...} :: tokens =>
           let val (condition, tokens) = parseExpression tokens in
             case tokens of
-              Scanner.RightParen :: tokens =>
+              {value = Scanner.RightParen, ...} :: tokens =>
                 let
                   val (thenBranch, tokens) = parseStatement tokens
                   val (elseBranch, tokens) =
                     case tokens of
-                      Scanner.Else :: tokens =>
+                      {value = Scanner.Else, ...} :: tokens =>
                         let val (elseBranch, tokens) = parseStatement tokens in
                           (SOME elseBranch, tokens)
                         end
@@ -313,10 +315,10 @@ structure Parser :> PARSER =
       | _ => raise Fail "Expect '(' after 'if'."
     and parseWhileStatement tokens =
       case tokens of
-        Scanner.LeftParen :: tokens =>
+        {value = Scanner.LeftParen, ...} :: tokens =>
           let val (condition, tokens) = parseExpression tokens in
             case tokens of
-              Scanner.RightParen :: tokens =>
+              {value = Scanner.RightParen, ...} :: tokens =>
                 let val (body, tokens) = parseStatement tokens in
                   (While (condition, body), tokens)
                 end
@@ -325,11 +327,13 @@ structure Parser :> PARSER =
       | _ => raise Fail "Expect '(' after 'while'."
     and parseReturnStatement tokens =
       case tokens of
-        Scanner.Semicolon :: tokens => (Return (Literal Nil), tokens)
+        {value = Scanner.Semicolon, ...} :: tokens =>
+          (Return (Literal Nil), tokens)
       | _ =>
           let val (expression, tokens) = parseExpression tokens in
             case tokens of
-              Scanner.Semicolon :: tokens => (Return expression, tokens)
+              {value = Scanner.Semicolon, ...} :: tokens =>
+                (Return expression, tokens)
             | _ => raise Fail "Expect ';' after return value."
           end
     and parsePrintStatement tokens =
@@ -346,7 +350,8 @@ structure Parser :> PARSER =
     and parseBlock' tokens acc =
       case tokens of
         [] => raise Fail "Expect '}' after block."
-      | Scanner.RightBrace :: tokens => (Block (List.rev acc), tokens)
+      | {value = Scanner.RightBrace, ...} :: tokens =>
+          (Block (List.rev acc), tokens)
       | _ =>
           let val (statement, tokens) = parseStatement tokens in
             parseBlock' tokens (statement :: acc)
@@ -416,7 +421,7 @@ structure Parser :> PARSER =
       end
     and parseCalls (callee, tokens) =
       case tokens of
-        Scanner.LeftParen :: tokens =>
+        {value = Scanner.LeftParen, ...} :: tokens =>
           let val (callee, tokens) = finishCall (callee, tokens) in
             parseCalls (callee, tokens)
           end
@@ -427,13 +432,14 @@ structure Parser :> PARSER =
         raise Fail "Can't have more than 255 arguments."
       else
         case tokens of
-          Scanner.RightParen :: tokens => (Call (callee, List.rev acc), tokens)
+          {value = Scanner.RightParen, ...} :: tokens =>
+            (Call (callee, List.rev acc), tokens)
         | _ =>
             let val (argument, tokens) = parseExpression tokens in
               case tokens of
-                Scanner.RightParen :: tokens =>
+                {value = Scanner.RightParen, ...} :: tokens =>
                   (Call (callee, List.rev (argument :: acc)), tokens)
-              | Scanner.Comma :: tokens =>
+              | {value = Scanner.Comma, ...} :: tokens =>
                   finishCall' (callee, tokens) (argument :: acc)
               | _ => raise Fail "Expect ')' after arguments."
             end
@@ -442,17 +448,17 @@ structure Parser :> PARSER =
         [] => raise Fail "Unable to parse primary from empty tokens"
       | token :: tokens' =>
           case token of
-            Scanner.False => (Literal False, tokens')
-          | Scanner.True => (Literal True, tokens')
-          | Scanner.Nil => (Literal Nil, tokens')
-          | Scanner.Number r => (Literal (Number r), tokens')
-          | Scanner.String s => (Literal (String s), tokens')
-          | Scanner.LeftParen =>
+            {value = Scanner.False, ...} => (Literal False, tokens')
+          | {value = Scanner.True, ...} => (Literal True, tokens')
+          | {value = Scanner.Nil, ...} => (Literal Nil, tokens')
+          | {value = Scanner.Number r, ...} => (Literal (Number r), tokens')
+          | {value = Scanner.String s, ...} => (Literal (String s), tokens')
+          | {value = Scanner.LeftParen, ...} =>
               let val (expr, tokens') = parseExpression tokens' in
                 case matchTypes [Scanner.RightParen] tokens' of
                   NONE => raise Fail "Expect ')' after expression."
                 | SOME (token, tokens') => (Grouping expr, tokens')
               end
-          | Scanner.Identifier ident => (Variable ident, tokens')
+          | {value = Scanner.Identifier ident, ...} => (Variable ident, tokens')
           | _ => raise Fail "Expect expression."
   end

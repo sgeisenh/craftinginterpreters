@@ -43,8 +43,6 @@ structure Scanner :> SCANNER =
     | While
     | Eof
 
-    type annotatedToken = {location : Common.source_location, token : token}
-
     fun tokenEqual (left, right) =
       case left of
         LeftParen =>
@@ -248,7 +246,7 @@ structure Scanner :> SCANNER =
 
     type t =
       { source : char list
-      , tokens : annotatedToken list
+      , tokens : (token Common.annotated) list
       , errors : Common.error list
       , line : int
       , offset : int
@@ -336,7 +334,7 @@ structure Scanner :> SCANNER =
                 }
           in
             { source = newSource
-            , tokens = {location = location, token = token} :: tokens
+            , tokens = {location = location, value = token} :: tokens
             , errors = errors
             , line = line
             , offset = offset + offsetDelta
@@ -368,7 +366,7 @@ structure Scanner :> SCANNER =
                 {start = start, finish = {line = newLine, offset = newOffset}}
           in
             { source = newSource
-            , tokens = {location = location, token = String str} :: tokens
+            , tokens = {location = location, value = String str} :: tokens
             , errors = errors
             , line = newLine
             , offset = newOffset
@@ -386,7 +384,7 @@ structure Scanner :> SCANNER =
                 {start = start, finish = {line = line, offset = newOffset}}
           in
             { source = tl
-            , tokens = {location = location, token = token} :: tokens
+            , tokens = {location = location, value = token} :: tokens
             , errors = errors
             , line = line
             , offset = newOffset
@@ -414,7 +412,7 @@ structure Scanner :> SCANNER =
                 {start = start, finish = {line = line, offset = newOffset}}
           in
             { source = tl
-            , tokens = {location = location, token = token} :: tokens
+            , tokens = {location = location, value = token} :: tokens
             , errors = errors
             , line = line
             , offset = offset + String.size numberString
@@ -481,7 +479,7 @@ structure Scanner :> SCANNER =
               Success
                 (List.rev
                    ({ location = Common.Position {line = line, offset = offset}
-                    , token = Eof
+                    , value = Eof
                     } :: tokens))
           | _ => Failure (List.rev errors)
         val tokens =

@@ -12,9 +12,34 @@ structure Common :> COMMON =
     datatype source_location =
     Position of source_position | Range of source_range
 
+    type 'a annotated = { value: 'a, location: source_location }
+
     type error = {description : string, source_location : source_location}
 
     fun repeat (c, n) = String.implode (List.tabulate (n, fn _ => c))
+
+    fun merge_location (left, right) =
+      case left of
+           Position {lline, loffset} => (case right of
+                                              Position {rline, roffset} =>
+                                              if rline < lline then
+                                                Range { start=right,
+                                                finish=left}
+                                              else if lline < rline then
+                                                Range { start = left,
+                                                finish = right}
+                                              else if roffset < loffset then
+                                                Range { start = right,
+                                                finish = left}
+                                              else
+                                                Range { start = left,
+                                                finish = right}
+                                            | Range { start=rstart,
+                                            finish=rfinish } => 
+
+
+    fun merge_locations locations =
+      List.foldl 
 
     fun render_position_context source position =
       let

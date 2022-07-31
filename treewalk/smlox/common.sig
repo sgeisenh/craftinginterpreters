@@ -7,6 +7,7 @@ signature COMMON =
     type source_range = {start : source_position, finish : source_position}
     datatype source_location =
     Position of source_position | Range of source_range
+    type 'a annotated = { value: 'a, location: source_location }
 
     type error = {description : string, source_location : source_location}
 
