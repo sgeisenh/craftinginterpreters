@@ -3,4 +3,16 @@ $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
 
 (* program files *)
+result.sig
+result.sml
+lox_value.sig
+lox_value.sml
+environment.sig
+environment.sml
+scanner.sig
+scanner.sml
+parser.sig
+parser.sml
+interpreter.sig
+interpreter.sml
 smlox.sml
