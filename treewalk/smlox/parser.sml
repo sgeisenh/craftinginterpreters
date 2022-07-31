@@ -18,6 +18,7 @@ structure Parser :> PARSER =
     datatype expr =
       Assign of (string * expr)
     | Binary of (binary_operator * expr * expr)
+    | Call of (expr * expr list)
     | Grouping of expr
     | Literal of literal
     | Logical of (logical_operator * expr * expr)
@@ -74,6 +75,11 @@ structure Parser :> PARSER =
           ^ exprToString left
           ^ " "
           ^ exprToString right
+          ^ ")"
+      | Call (callee, arguments) =>
+          "("
+          ^ exprToString callee
+          ^ String.concatWith " " (map exprToString arguments)
           ^ ")"
       | Grouping expr => "(group" ^ exprToString expr ^ ")"
       | Literal literal => literalToString literal
@@ -342,11 +348,38 @@ structure Parser :> PARSER =
       parseBinaryLevel [Scanner.Slash, Scanner.Star] parseUnary tokens
     and parseUnary tokens =
       case matchTypes [Scanner.Bang, Scanner.Minus] tokens of
-        NONE => parsePrimary tokens
+        NONE => parseCall tokens
       | SOME (token, tokens') =>
           let val (expr, tokens') = parseUnary tokens' in
             (Unary (tokenToUnop token, expr), tokens')
           end
+    and parseCall tokens =
+      let val (callee, tokens) = parsePrimary tokens in
+        parseCalls (callee, tokens)
+      end
+    and parseCalls (callee, tokens) =
+      case tokens of
+        Scanner.LeftParen :: tokens =>
+          let val (callee, tokens) = finishCall (callee, tokens) in
+            parseCalls (callee, tokens)
+          end
+      | _ => (callee, tokens)
+    and finishCall (callee, tokens) = finishCall' (callee, tokens) []
+    and finishCall' (callee, tokens) acc =
+      if length acc >= 255 then
+        raise Fail "Can't have more than 255 arguments."
+      else
+        case tokens of
+          Scanner.RightParen :: tokens => (Call (callee, List.rev acc), tokens)
+        | _ =>
+            let val (argument, tokens) = parseExpression tokens in
+              case tokens of
+                Scanner.RightParen :: tokens =>
+                  (Call (callee, List.rev (argument :: acc)), tokens)
+              | Scanner.Comma :: tokens =>
+                  finishCall' (callee, tokens) (argument :: acc)
+              | _ => raise Fail "Expect ')' after arguments."
+            end
     and parsePrimary tokens =
       case tokens of
         [] => raise Fail "Unable to parse primary from empty tokens"

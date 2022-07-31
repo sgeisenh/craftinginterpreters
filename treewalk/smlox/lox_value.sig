@@ -16,6 +16,7 @@ signature LOX_VALUE =
     val lessEq : (t * t) -> t
     val negate : t -> t
     val logicalNot : t -> t
+    val call : (t * t list) -> t
 
     val isTruthy : t -> bool
 

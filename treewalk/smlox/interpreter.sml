@@ -26,6 +26,13 @@ structure Interpreter =
              | Less => LoxValue.less (left', right')
              | LessEqual => LoxValue.lessEq (left', right'))
           end
+      | Call (callee, arguments) =>
+          let
+            val callee = evaluateExpr environment callee
+            val arguments = map (evaluateExpr environment) arguments
+          in
+            LoxValue.call(callee, arguments)
+          end
       | Grouping expr' => evaluateExpr environment expr'
       | Literal literal =>
           (case literal of
