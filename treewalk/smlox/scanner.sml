@@ -1,5 +1,7 @@
 structure Scanner :> SCANNER =
   struct
+    open Common
+
     datatype token =
       LeftParen
     | RightParen
@@ -424,8 +426,8 @@ structure Scanner :> SCANNER =
       let
         fun createResult {source, tokens, errors, line} =
           case errors of
-            [] => Result.Success (List.rev (Eof :: tokens))
-          | _ => Result.Failure (List.rev errors)
+            [] => Success (List.rev (Eof :: tokens))
+          | _ => Failure (List.rev errors)
       in
         case scanner of
           {source = [], ...} => createResult scanner

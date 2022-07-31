@@ -1,3 +1,5 @@
+open Common
+
 val startTimeSecs = Time.toReal (Time.now ())
 
 val globals =
@@ -7,14 +9,15 @@ val globals =
           | _ => LoxValue.Number (Time.toReal (Time.now ()) - startTimeSecs))
     )
   ]
+
 fun run environment program =
   let
     val scanner = Scanner.make program
     val tokensOrErrors = Scanner.scanTokens scanner
     val justTokens =
       case tokensOrErrors of
-        Result.Success tokens => tokens
-      | Result.Failure failures =>
+        Success tokens => tokens
+      | Failure failures =>
           ( (app
                (fn {message, line} =>
                   print
