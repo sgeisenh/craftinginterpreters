@@ -1,0 +1,53 @@
+fun error(line, message) {
+  report(line, "", message);
+}
+
+var hadError = false;
+fun report(line, where, message) {
+  print("[line " + line + "] Error" + where + ": " + message);
+  hadError = true;
+}
+
+fun exit(message) {
+  print(message);
+  "5" - 5;
+}
+
+class List {
+  init(value, rest) {
+    this.value = value;
+    this.rest = rest;
+  }
+}
+
+fun printList(list) {
+  while (list != nil) {
+    print(list.value);
+    list = list.rest;
+  }
+}
+
+
+class Scanner {
+  init(source) {
+    this.source = source;
+  }
+
+  scanTokens() {
+    return List("a", List("b", nil));
+  }
+}
+
+fun run(source) {
+  var scanner = Scanner(source);
+  printList(scanner.scanTokens());
+}
+
+fun main() {
+  var source = read();
+  error(10, "stupid things happened");
+  exit("Wat");
+  run(source);
+}
+
+main();
