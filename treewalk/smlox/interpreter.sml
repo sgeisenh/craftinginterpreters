@@ -2,6 +2,8 @@ structure Interpreter =
   struct
     open Parser
 
+    exception ReturnExn of LoxValue.t
+
     fun evaluateExpr environment expr =
       case expr of
         Assign (ident, expr) =>
@@ -31,7 +33,7 @@ structure Interpreter =
             val callee = evaluateExpr environment callee
             val arguments = map (evaluateExpr environment) arguments
           in
-            LoxValue.call (callee, arguments)
+            LoxValue.call (callee, arguments) handle ReturnExn value => value
           end
       | Grouping expr' => evaluateExpr environment expr'
       | Literal literal =>
@@ -104,6 +106,10 @@ structure Interpreter =
       | Print expr =>
           let val result = evaluateExpr environment expr in
             print (LoxValue.toString result ^ "\n")
+          end
+      | Return expr =>
+          let val result = evaluateExpr environment expr in
+            raise ReturnExn result
           end
       | Var (ident, expr) =>
           let val result = evaluateExpr environment expr in

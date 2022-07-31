@@ -31,6 +31,7 @@ signature PARSER =
     | If of (expr * statement * statement option)
     | While of (expr * statement)
     | Print of expr
+    | Return of expr
     | Var of (string * expr)
 
     val binOpToString : binary_operator -> string

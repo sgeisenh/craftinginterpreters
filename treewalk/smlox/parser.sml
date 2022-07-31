@@ -31,6 +31,7 @@ structure Parser :> PARSER =
     | If of (expr * statement * statement option)
     | While of (expr * statement)
     | Print of expr
+    | Return of expr
     | Var of (string * expr)
 
     fun binOpToString operator =
@@ -159,6 +160,7 @@ structure Parser :> PARSER =
       | Scanner.For :: tokens' => parseForStatement tokens'
       | Scanner.If :: tokens' => parseIfStatement tokens'
       | Scanner.While :: tokens' => parseWhileStatement tokens'
+      | Scanner.Return :: tokens => parseReturnStatement tokens
       | Scanner.Print :: tokens' => parsePrintStatement tokens'
       | Scanner.LeftBrace :: tokens' => parseBlock tokens'
       | _ => parseExpressionStatement tokens
@@ -309,6 +311,15 @@ structure Parser :> PARSER =
             | _ => raise Fail "Expect ')' after condition."
           end
       | _ => raise Fail "Expect '(' after 'while'."
+    and parseReturnStatement tokens =
+      case tokens of
+        Scanner.Semicolon :: tokens => (Return (Literal Nil), tokens)
+      | _ =>
+          let val (expression, tokens) = parseExpression tokens in
+            case tokens of
+              Scanner.Semicolon :: tokens => (Return expression, tokens)
+            | _ => raise Fail "Expect ';' after return value."
+          end
     and parsePrintStatement tokens =
       let
         val (expr, tokens') = parseExpression tokens

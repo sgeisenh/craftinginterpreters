@@ -53,9 +53,9 @@ structure LoxValue :> LOX_VALUE =
       | logicalNot _ = raise RuntimeError "Operand to unary ! must be a boolean"
 
     fun call (callee, arguments) =
-          case callee of
-            Function function => function arguments
-          | _ => raise RuntimeError "can only call functions."
+      case callee of
+        Function function => function arguments
+      | _ => raise RuntimeError "can only call functions."
 
     fun isTruthy (Boolean false) = false
       | isTruthy Nil = false
@@ -67,6 +67,6 @@ structure LoxValue :> LOX_VALUE =
       | Boolean true => "true"
       | Boolean false => "false"
       | Number r => Real.toString r
-      | String s => "\"" ^ s ^ "\""
+      | String s => s
       | Function function => "<function>"
   end
