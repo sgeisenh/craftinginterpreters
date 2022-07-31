@@ -13,6 +13,8 @@ scanner.sig
 scanner.sml
 parser.sig
 parser.sml
+binding.sig
+binding.sml
 interpreter.sig
 interpreter.sml
 smlox.sml

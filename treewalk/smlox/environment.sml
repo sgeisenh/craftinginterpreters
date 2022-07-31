@@ -29,4 +29,15 @@ structure Environment :> ENVIRONMENT =
       case getEnclosing context ident of
         NONE => raise Fail "Unknown variable."
       | SOME scope => HashTable.insert scope (ident, value)
+
+    fun getJumps' [] ident level = raise UnknownVariable ident
+      | getJumps' (curr::rest) ident level =
+      case HashTable.find curr ident of
+           SOME _ => level
+         | NONE => getJumps' rest ident (level + 1)
+    fun getJumps context ident = getJumps' context ident 0
+
+    fun getFrom [] _ _ = raise Fail "Unreachable"
+      | getFrom (curr :: rest) ident 0 = HashTable.lookup curr ident
+      | getFrom (curr :: rest) ident level = getFrom rest ident (level - 1)
   end

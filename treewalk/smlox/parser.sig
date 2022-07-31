@@ -25,7 +25,7 @@ signature PARSER =
     | Logical of
                 (logical_operator * expr Common.annotated * expr Common.annotated)
     | Unary of (unary_operator * expr Common.annotated)
-    | Variable of string
+    | Variable of string * int option
     datatype statement =
       Block of (statement Common.annotated) list
     | Expression of expr Common.annotated
