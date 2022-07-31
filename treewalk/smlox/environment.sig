@@ -4,7 +4,7 @@ signature ENVIRONMENT =
 
     exception UnknownVariable of string
 
-    val make : unit -> t
+    val make : (string * LoxValue.t) list -> t
     val makeNested : t -> t
     val declare : t -> (string * LoxValue.t) -> unit
     val get : t -> string -> LoxValue.t

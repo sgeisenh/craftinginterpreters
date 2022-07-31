@@ -27,6 +27,7 @@ structure Parser :> PARSER =
     datatype statement =
       Block of statement list
     | Expression of expr
+    | Function of (string * string list * statement list)
     | If of (expr * statement * statement option)
     | While of (expr * statement)
     | Print of expr
@@ -153,13 +154,46 @@ structure Parser :> PARSER =
           end
     and parseStatement tokens =
       case tokens of
-        Scanner.Var :: tokens' => parseVarDeclaration tokens'
+        Scanner.Fun :: tokens => parseFunction ("function", tokens)
+      | Scanner.Var :: tokens' => parseVarDeclaration tokens'
       | Scanner.For :: tokens' => parseForStatement tokens'
       | Scanner.If :: tokens' => parseIfStatement tokens'
       | Scanner.While :: tokens' => parseWhileStatement tokens'
       | Scanner.Print :: tokens' => parsePrintStatement tokens'
       | Scanner.LeftBrace :: tokens' => parseBlock tokens'
       | _ => parseExpressionStatement tokens
+    and parseFunction (kind, tokens) =
+      case tokens of
+        Scanner.Identifier name :: tokens =>
+          (case tokens of
+             Scanner.LeftParen :: tokens =>
+               let
+                 val (parameters, tokens) = parseParameters tokens
+                 val (body, tokens) =
+                   case tokens of
+                     Scanner.LeftBrace :: tokens =>
+                       (case parseBlock tokens of
+                          (Block body, tokens) => (body, tokens)
+                        | _ => raise Fail "Unreachable.")
+                   | _ => raise Fail ("Expect '{' before " ^ kind ^ " body.")
+               in
+                 (Function (name, parameters, body), tokens)
+               end
+           | _ => raise Fail ("Expect '(' after " ^ kind ^ " name."))
+      | _ => raise Fail ("Expect " ^ kind ^ " name.")
+    and parseParameters tokens = parseParameters' tokens []
+    and parseParameters' tokens acc =
+      case tokens of
+        Scanner.RightParen :: tokens => (List.rev acc, tokens)
+      | Scanner.Identifier parameter :: tokens =>
+          (case tokens of
+             Scanner.Comma :: tokens =>
+               parseParameters' tokens (parameter :: acc)
+           | Scanner.RightParen :: tokens =>
+               parseParameters' (Scanner.RightParen :: tokens)
+                 (parameter :: acc)
+           | _ => raise Fail "Only comma or rparen after param")
+      | _ => raise Fail "Expect parameter name."
     and parseVarDeclaration tokens =
       case tokens of
         (Scanner.Identifier ident) :: tokens' =>

@@ -8,7 +8,10 @@ structure Environment :> ENVIRONMENT =
       HashTable.mkTable
         (HashString.hashString, fn (left, right) => left = right)
         (256, Fail "Unknown variable.")
-    fun make () = [makeInner ()]
+    fun make globals =
+      let val environment = makeInner () in
+        app (HashTable.insert environment) globals; [environment]
+      end
     fun makeNested context = makeInner () :: context
     fun declare context value = HashTable.insert (hd context) value
     fun get [] ident = raise UnknownVariable ident

@@ -5,7 +5,7 @@ structure LoxValue :> LOX_VALUE =
     | Boolean of bool
     | Number of real
     | String of string
-    | Fun of t list -> t
+    | Function of t list -> t
 
     exception RuntimeError of string
 
@@ -52,27 +52,10 @@ structure LoxValue :> LOX_VALUE =
     fun logicalNot (Boolean operand) = Boolean (not operand)
       | logicalNot _ = raise RuntimeError "Operand to unary ! must be a boolean"
 
-    fun arity (Callable {arity, ...}) = arity
-      | arity _ = raise RuntimeError "arity only available on callables"
-
-    fun call context (callee, arguments) =
-      let
-        val expected = arity callee
-        val actual = List.length arguments
-      in
-        if expected <> actual then
-          raise
-            Fail
-              ("Expected "
-               ^ Int.toString expected
-               ^ " arguments but got "
-               ^ Int.toString actual
-               ^ ".")
-        else
+    fun call (callee, arguments) =
           case callee of
-            Callable {call, ...} => call (context, arguments)
-          | _ => raise RuntimeError "can only call callables."
-      end
+            Function function => function arguments
+          | _ => raise RuntimeError "can only call functions."
 
     fun isTruthy (Boolean false) = false
       | isTruthy Nil = false
@@ -85,4 +68,5 @@ structure LoxValue :> LOX_VALUE =
       | Boolean false => "false"
       | Number r => Real.toString r
       | String s => "\"" ^ s ^ "\""
+      | Function function => "<function>"
   end

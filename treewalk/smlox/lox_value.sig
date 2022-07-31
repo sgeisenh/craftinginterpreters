@@ -5,7 +5,7 @@ signature LOX_VALUE =
     | Boolean of bool
     | Number of real
     | String of string
-    | Fun of t list -> t
+    | Function of t list -> t
 
     exception RuntimeError of string
 

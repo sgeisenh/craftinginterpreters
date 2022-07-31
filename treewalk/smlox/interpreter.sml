@@ -69,6 +69,22 @@ structure Interpreter =
           List.app (evaluateStatement (Environment.makeNested environment))
             statements
       | Expression expr => (evaluateExpr environment expr; ())
+      | Function (name, parameters, body) =>
+          let
+            fun function arguments =
+              if List.length arguments <> List.length parameters then
+                raise Fail "arity"
+              else
+                let val newEnvironment = Environment.makeNested environment in
+                  ( List.app (Environment.declare newEnvironment)
+                      (ListPair.zip (parameters, arguments))
+                  ; List.app (evaluateStatement newEnvironment) body
+                  ; LoxValue.Nil
+                  )
+                end
+          in
+            Environment.declare environment (name, LoxValue.Function function)
+          end
       | If (condition, thenBranch, elseBranch) =>
           let val conditionResult = evaluateExpr environment condition in
             if LoxValue.isTruthy conditionResult then

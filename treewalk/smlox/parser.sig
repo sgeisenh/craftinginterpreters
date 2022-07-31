@@ -27,6 +27,7 @@ signature PARSER =
     datatype statement =
       Block of statement list
     | Expression of expr
+    | Function of (string * string list * statement list)
     | If of (expr * statement * statement option)
     | While of (expr * statement)
     | Print of expr
