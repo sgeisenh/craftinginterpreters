@@ -20,7 +20,8 @@ structure LoxValue :> LOX_VALUE =
 
     fun plus (Number left, Number right) = Number (left + right)
       | plus (String left, String right) = String (left ^ right)
-      | plus _ = raise RuntimeError "Operands to + must both be numbers or strings"
+      | plus _ =
+        raise RuntimeError "Operands to + must both be numbers or strings"
 
     fun times (Number left, Number right) = Number (left * right)
       | times _ = raise RuntimeError "Operands to * must be numbers"

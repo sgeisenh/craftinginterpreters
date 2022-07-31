@@ -42,11 +42,11 @@ signature SCANNER =
     | Eof
 
     val tokenEqual : (token * token) -> bool
-    val tokenToString: token -> string
+    val tokenToString : token -> string
 
     type t
     type error = {message : string, line : int}
 
-    val make: string -> t
-    val scanTokens: t -> (token list, error list) Result.t
+    val make : string -> t
+    val scanTokens : t -> (token list, error list) Result.t
   end

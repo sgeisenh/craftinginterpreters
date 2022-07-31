@@ -329,8 +329,7 @@ structure Scanner :> SCANNER =
           {source = newSource, tokens = tokens, errors = errors, line = line}
         fun addString (contents, newSource) =
           { source = newSource
-          , tokens =
-              String (String.implode contents) :: tokens
+          , tokens = String (String.implode contents) :: tokens
           , errors = errors
           , line = line + List.length (List.filter (fn c => c = #"\n") contents)
           }
@@ -390,7 +389,8 @@ structure Scanner :> SCANNER =
         | #"+" :: newSource => addToken (Plus, newSource)
         | #";" :: newSource => addToken (Semicolon, newSource)
         | #"*" :: newSource => addToken (Star, newSource)
-        | #"/" :: #"/" :: tl => withNewSource (dropWhile (fn c => c <> #"\n") tl)
+        | #"/" :: #"/" :: tl =>
+            withNewSource (dropWhile (fn c => c <> #"\n") tl)
         | #"/" :: newSource => addToken (Slash, newSource)
         | #"!" :: #"=" :: newSource => addToken (BangEqual, newSource)
         | #"!" :: newSource => addToken (Bang, newSource)
@@ -424,8 +424,7 @@ structure Scanner :> SCANNER =
       let
         fun createResult {source, tokens, errors, line} =
           case errors of
-            [] =>
-              Result.Success (List.rev (Eof :: tokens))
+            [] => Result.Success (List.rev (Eof :: tokens))
           | _ => Result.Failure (List.rev errors)
       in
         case scanner of
