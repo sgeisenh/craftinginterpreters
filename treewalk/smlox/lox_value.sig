@@ -1,6 +1,11 @@
 signature LOX_VALUE =
   sig
-    datatype t = Nil | Boolean of bool | Number of real | String of string
+    datatype t =
+      Nil
+    | Boolean of bool
+    | Number of real
+    | String of string
+    | Fun of t list -> t
 
     exception RuntimeError of string
 

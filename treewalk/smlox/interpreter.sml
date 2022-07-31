@@ -31,7 +31,7 @@ structure Interpreter =
             val callee = evaluateExpr environment callee
             val arguments = map (evaluateExpr environment) arguments
           in
-            LoxValue.call(callee, arguments)
+            LoxValue.call (callee, arguments)
           end
       | Grouping expr' => evaluateExpr environment expr'
       | Literal literal =>

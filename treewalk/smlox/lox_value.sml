@@ -1,7 +1,11 @@
 structure LoxValue :> LOX_VALUE =
   struct
-    datatype t = Nil | Boolean of bool | Number of real | String of string |
-    Callable of { arity : int, call : (Context.t * t list) -> t }
+    datatype t =
+      Nil
+    | Boolean of bool
+    | Number of real
+    | String of string
+    | Fun of t list -> t
 
     exception RuntimeError of string
 
@@ -48,7 +52,7 @@ structure LoxValue :> LOX_VALUE =
     fun logicalNot (Boolean operand) = Boolean (not operand)
       | logicalNot _ = raise RuntimeError "Operand to unary ! must be a boolean"
 
-    fun arity (Callable { arity, ... }) = arity
+    fun arity (Callable {arity, ...}) = arity
       | arity _ = raise RuntimeError "arity only available on callables"
 
     fun call context (callee, arguments) =
@@ -66,7 +70,7 @@ structure LoxValue :> LOX_VALUE =
                ^ ".")
         else
           case callee of
-            Callable { call, ... } => call (context, arguments)
+            Callable {call, ...} => call (context, arguments)
           | _ => raise RuntimeError "can only call callables."
       end
 
