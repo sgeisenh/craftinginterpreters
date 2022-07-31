@@ -55,6 +55,34 @@ structure LoxValue =
       | String s => "\"" ^ s ^ "\""
   end
 
+structure Context =
+  struct
+    type t = (string, LoxValue.t) HashTable.hash_table list
+
+    fun makeInner () =
+      HashTable.mkTable
+        (HashString.hashString, fn (left, right) => left = right)
+        (256, Fail "Unknown variable.")
+    fun make () = [makeInner ()]
+    fun add context value = HashTable.insert (hd context) value
+    fun get [] _ = raise Fail "Unknown variable."
+      | get (curr :: rest) ident =
+        case HashTable.find curr ident of
+          SOME v => v
+        | NONE => get rest ident
+    fun getEnclosing [] _ = NONE
+      | getEnclosing (curr :: rest) ident =
+        if HashTable.inDomain curr ident then
+          SOME curr
+        else
+          getEnclosing rest ident
+    fun assign context (ident, value) =
+      case getEnclosing context ident of
+        NONE => raise Fail "Unknown variable."
+      | SOME scope => HashTable.insert scope (ident, value)
+    fun makeNested context = makeInner () :: context
+  end
+
 structure Token =
   struct
     datatype tokenType =
@@ -308,6 +336,7 @@ structure Token =
       ^ Int.toString line
       ^ " }"
   end
+ 
 
 structure Ast =
   struct
@@ -328,10 +357,17 @@ structure Ast =
     | Or
     datatype unary_operator = Negative | Bang
     datatype expr =
-      Binary of (binary_operator * expr * expr)
+      Assign of (string * expr)
+    | Binary of (binary_operator * expr * expr)
     | Grouping of expr
     | Literal of literal
     | Unary of (unary_operator * expr)
+    | Variable of string
+    datatype statement =
+      Block of statement list
+    | Expression of expr
+    | Print of expr
+    | Var of (string * expr)
 
     fun binOpToString operator =
       case operator of
@@ -361,7 +397,13 @@ structure Ast =
       | Nil => "nil"
     fun exprToString expr =
       case expr of
-        Binary (operator, left, right) =>
+        Assign (ident, expr) =>
+          "(assign "
+          ^ ident
+          ^ " "
+          ^ exprToString expr
+          ^ ")"
+      | Binary (operator, left, right) =>
           "("
           ^ binOpToString operator
           ^ " "
@@ -377,6 +419,7 @@ structure Ast =
           ^ " "
           ^ exprToString expr
           ^ ")"
+      | Variable ident => "(variable " ^ ident ^ ")"
 
     fun matchTypes (types : Token.tokenType list) (tokens : Token.tokenType list) =
       case tokens of
@@ -423,8 +466,81 @@ structure Ast =
       end
      
 
-    fun parse tokens = parseExpression tokens
-    and parseExpression (tokens : Token.tokenType list) = parseEquality tokens
+    fun parse tokens = parseStatements tokens
+    and parseStatements tokens = parseStatements' (tokens, [])
+    and parseStatements' (tokens, acc) =
+      case tokens of
+        [] => List.rev acc
+      | [Token.Eof] => List.rev acc
+      | _ =>
+          let val (statement, tokens') = parseStatement tokens in
+            parseStatements' (tokens', (statement :: acc))
+          end
+    and parseStatement tokens =
+      case tokens of
+        Token.Var :: tokens' => parseVarDeclaration tokens'
+      | Token.Print :: tokens' => parsePrintStatement tokens'
+      | Token.LeftBrace :: tokens' => parseBlock tokens'
+      | _ => parseExpressionStatement tokens
+    and parseVarDeclaration tokens =
+      case tokens of
+        (Token.Identifier ident) :: tokens' =>
+          (case matchTypes [Token.Equal] tokens' of
+             NONE => (Var (ident, Literal Nil), tokens')
+           | SOME (_, tokens') =>
+               let
+                 val (expr, tokens') = parseExpression tokens'
+                 val tokens' =
+                   case matchTypes [Token.Semicolon] tokens' of
+                     NONE => raise Fail "Expect ';' after variable declaration."
+                   | SOME (_, tokens' : Token.tokenType list) => tokens'
+               in
+                 (Var (ident, expr), tokens')
+               end)
+      | _ => raise Fail "Expect variable name."
+    and parsePrintStatement tokens =
+      let
+        val (expr : expr, tokens' : Token.tokenType list) =
+          parseExpression tokens
+        val tokens' =
+          case matchTypes [Token.Semicolon] tokens' of
+            NONE => raise Fail "Expect ';' after value."
+          | SOME (_, tokens') => tokens'
+      in
+        (Print expr, tokens')
+      end
+    and parseBlock tokens = parseBlock' tokens []
+    and parseBlock' tokens acc =
+      case tokens of
+        [] => raise Fail "Expect '}' after block."
+      | Token.RightBrace :: tokens => (Block (List.rev acc), tokens)
+      | _ =>
+          let val (statement, tokens) = parseStatement tokens in
+            parseBlock' tokens (statement :: acc)
+          end
+    and parseExpressionStatement tokens =
+      let
+        val (expr, tokens') = parseExpression tokens
+        val tokens' =
+          case matchTypes [Token.Semicolon] tokens' of
+            NONE => raise Fail "Expect ';' after expression."
+          | SOME (_, tokens') => tokens'
+      in
+        (Expression expr, tokens')
+      end
+    and parseExpression (tokens : Token.tokenType list) : (expr * Token.tokenType list) =
+      parseAssignment tokens
+    and parseAssignment tokens =
+      let val (left, tokens) = parseEquality tokens in
+        case matchTypes [Token.Equal] tokens of
+          NONE => (left, tokens)
+        | SOME (_, tokens) =>
+            let val (value, tokens) = parseAssignment tokens in
+              case left of
+                Variable ident => (Assign (ident, value), tokens)
+              | _ => raise Fail "Expected ident."
+            end
+      end
     and parseEquality (tokens : Token.tokenType list) =
       parseBinaryLevel [Token.BangEqual, Token.EqualEqual] parseComparison
         tokens
@@ -460,14 +576,19 @@ structure Ast =
                   NONE => raise Fail "Expect ')' after expression."
                 | SOME (token, tokens') => (Grouping expr, tokens')
               end
+          | Token.Identifier ident => (Variable ident, tokens')
           | _ => raise Fail "Expect expression."
 
-    fun evaluateExpr expr =
+    fun evaluateExpr context expr =
       case expr of
-        Binary (binOp, left, right) =>
+        Assign (ident, expr) =>
+          let val result = evaluateExpr context expr in
+            Context.assign context (ident, result); result
+          end
+      | Binary (binOp, left, right) =>
           let
-            val left' = evaluateExpr left
-            val right' = evaluateExpr right
+            val left' = evaluateExpr context left
+            val right' = evaluateExpr context right
           in
             (case binOp of
                Dot => raise Fail "Unimplemented"
@@ -484,7 +605,7 @@ structure Ast =
              | And => raise Fail "Unimplemented"
              | Or => raise Fail "Unimplemented")
           end
-      | Grouping expr' => evaluateExpr expr'
+      | Grouping expr' => evaluateExpr context expr'
       | Literal literal =>
           (case literal of
              Number r => LoxValue.Number r
@@ -493,13 +614,33 @@ structure Ast =
            | False => LoxValue.Boolean false
            | Nil => LoxValue.Nil)
       | Unary (unOp, expr') =>
-          let val expr' = evaluateExpr expr' in
+          let val expr' = evaluateExpr context expr' in
             case unOp of
               Bang => LoxValue.logicalNot expr'
             | Negative => LoxValue.negate expr'
           end
-   
+      | Variable ident => Context.get context ident
+  end
 
+structure Interpreter =
+  struct
+    datatype t = unit
+
+    fun evaluateStatement context statement =
+      case statement of
+        Ast.Block statements =>
+          List.app (evaluateStatement (Context.makeNested context)) statements
+      | Ast.Expression expr => (Ast.evaluateExpr context expr; ())
+      | Ast.Print expr =>
+          let val result = Ast.evaluateExpr context expr in
+            print (LoxValue.toString result ^ "\n")
+          end
+      | Ast.Var (ident, expr) =>
+          let val result = Ast.evaluateExpr context expr in
+            Context.add context (ident, result)
+          end
+
+    fun interpret context = List.app (evaluateStatement context)
   end
  
 
@@ -696,42 +837,44 @@ fun scanTokens scanner =
     | _ => scanTokens (scanToken scanner)
   end
 
-fun run program =
+fun run context program =
   let
     val scanner = makeScanner program
     val tokensOrErrors = scanTokens scanner
+    val justTokens =
+      case tokensOrErrors of
+        Success tokens => map (fn {tokenType, ...} => tokenType) tokens
+      | Failure failures =>
+          ( (app
+               (fn {message, line} =>
+                  print
+                    ("Error on line "
+                     ^ Int.toString line
+                     ^ ": "
+                     ^ message
+                     ^ "\n"))
+               failures)
+          ; raise Fail "Scanning error."
+          )
+    val ast = Ast.parse justTokens
   in
-    case tokensOrErrors of
-      Success tokens =>
-        let
-          val (ast, _) =
-            Ast.parse (map (fn {tokenType, ...} => tokenType) tokens)
-          val result = Ast.evaluateExpr ast
-        in
-          print (LoxValue.toString result ^ "\n")
-        end
-    | Failure failures =>
-        app
-          (fn {message, line} =>
-             print
-               ("Error on line "
-                ^ Int.toString (line)
-                ^ ": "
-                ^ message
-                ^ "\n"))
-          failures
+    Interpreter.interpret context ast
   end
 
 fun runFile filename =
-  let val program = TextIO.input (TextIO.openIn filename) in run program end
+  let val program = TextIO.input (TextIO.openIn filename) in
+    run (Context.make ()) program
+  end
 
 fun runPrompt () =
-  while true do
-    let val maybeLine = TextIO.inputLine TextIO.stdIn in
-      case maybeLine of
-        SOME line => run line
-      | NONE => OS.Process.exit OS.Process.success
-    end
+  let val context = Context.make () in
+    while true do
+      let val maybeLine = TextIO.inputLine TextIO.stdIn in
+        case maybeLine of
+          SOME line => run context line
+        | NONE => OS.Process.exit OS.Process.success
+      end
+  end
 
 val () =
   case CommandLine.arguments () of
