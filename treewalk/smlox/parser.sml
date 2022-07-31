@@ -1,5 +1,7 @@
 structure Parser :> PARSER =
   struct
+    open Common
+
     exception UnexpectedToken of (string * Scanner.token Common.annotated)
 
     datatype literal = Number of real | String of string | True | False | Nil
@@ -18,100 +20,33 @@ structure Parser :> PARSER =
     datatype logical_operator = And | Or
     datatype unary_operator = Negative | Bang
     datatype expr =
-      Assign of (string * expr)
-    | Binary of (binary_operator * expr * expr)
-    | Call of (expr * expr list)
-    | Grouping of expr
+      Assign of (string * expr annotated)
+    | Binary of (binary_operator * expr annotated * expr annotated)
+    | Call of (expr annotated * expr annotated list)
+    | Grouping of expr annotated
     | Literal of literal
-    | Logical of (logical_operator * expr * expr)
-    | Unary of (unary_operator * expr)
+    | Logical of (logical_operator * expr annotated * expr annotated)
+    | Unary of (unary_operator * expr annotated)
     | Variable of string
     datatype statement =
-      Block of statement list
-    | Expression of expr
-    | Function of (string * string list * statement list)
-    | If of (expr * statement * statement option)
-    | While of (expr * statement)
-    | Print of expr
-    | Return of expr
-    | Var of (string * expr)
-
-    fun binOpToString operator =
-      case operator of
-        Dot => "Dot"
-      | Minus => "Minus"
-      | Plus => "Plus"
-      | Slash => "Slash"
-      | Star => "Star"
-      | BangEqual => "BangEqual"
-      | EqualEqual => "EqualEqual"
-      | Greater => "Greater"
-      | GreaterEqual => "GreaterEqual"
-      | Less => "Less"
-      | LessEqual => "LessEqual"
-    fun logOpToString operator =
-      case operator of
-        Or => "Or"
-      | And => "And"
-    fun unaryOpToString operator =
-      case operator of
-        Negative => "Negative"
-      | Bang => "Bang"
-    fun literalToString literal =
-      case literal of
-        Number r => Real.toString r
-      | String s => "\"" ^ s ^ "\""
-      | True => "true"
-      | False => "false"
-      | Nil => "nil"
-    fun exprToString expr =
-      case expr of
-        Assign (ident, expr) =>
-          "(assign "
-          ^ ident
-          ^ " "
-          ^ exprToString expr
-          ^ ")"
-      | Binary (operator, left, right) =>
-          "("
-          ^ binOpToString operator
-          ^ " "
-          ^ exprToString left
-          ^ " "
-          ^ exprToString right
-          ^ ")"
-      | Call (callee, arguments) =>
-          "("
-          ^ exprToString callee
-          ^ String.concatWith " " (map exprToString arguments)
-          ^ ")"
-      | Grouping expr => "(group" ^ exprToString expr ^ ")"
-      | Literal literal => literalToString literal
-      | Unary (operator, expr) =>
-          "("
-          ^ unaryOpToString operator
-          ^ " "
-          ^ exprToString expr
-          ^ ")"
-      | Variable ident => "(variable " ^ ident ^ ")"
-      | Logical (operator, left, right) =>
-          "("
-          ^ logOpToString operator
-          ^ " "
-          ^ exprToString left
-          ^ " "
-          ^ exprToString right
-          ^ ")"
+      Block of statement annotated list
+    | Expression of expr annotated
+    | Function of (string * string list * statement annotated list)
+    | If of (expr * statement annotated * statement annotated option)
+    | While of (expr annotated * statement annotated)
+    | Print of expr annotated
+    | Return of expr annotated
+    | Var of (string * expr annotated)
 
     fun matchTypes types tokens =
       case tokens of
         [] => NONE
-      | token :: tokens' =>
+      | token :: tokens =>
           if
             List.exists (fn typ => Scanner.tokenEqual (typ, # value token))
               types
           then
-            SOME (token, tokens')
+            SOME (token, tokens)
           else
             NONE
 
@@ -140,15 +75,25 @@ structure Parser :> PARSER =
       end
 
     fun parseBinaryLevel types next tokens =
-      let val (left, tokens') = next (tokens) in
-        case matchTypes types tokens' of
-          NONE => (left, tokens')
-        | SOME (token, tokens') =>
+      let
+        val (left, tokens) = next (tokens)
+        val {location = leftLocation, ...} = left
+      in
+        case matchTypes types tokens of
+          NONE => (left, tokens)
+        | SOME (token, tokens) =>
             let
-              val (right, tokens') = parseBinaryLevel types next tokens'
+              val (right, tokens) = parseBinaryLevel types next tokens
+              val {location = rightLocation, ...} = right
               val operator = tokenToBinop token
+              val merged_location =
+                merge_locations [leftLocation, rightLocation]
             in
-              (Binary (operator, left, right), tokens')
+              ( { location = merged_location
+                , value = Binary (operator, left, right)
+                }
+              , tokens
+              )
             end
       end
 
@@ -162,37 +107,45 @@ structure Parser :> PARSER =
         [] => List.rev acc
       | [{value = Scanner.Eof, ...}] => List.rev acc
       | _ =>
-          let val (statement, tokens') = parseStatement tokens in
-            parseStatements' (tokens', (statement :: acc))
+          let val (statement, tokens) = parseStatement tokens in
+            parseStatements' (tokens, (statement :: acc))
           end
     and parseStatement tokens =
       case tokens of
-        {value = Scanner.Fun, ...} :: tokens =>
-          parseFunction ("function", tokens)
-      | {value = Scanner.Var, ...} :: tokens' => parseVarDeclaration tokens'
-      | {value = Scanner.For, ...} :: tokens' => parseForStatement tokens'
-      | {value = Scanner.If, ...} :: tokens' => parseIfStatement tokens'
-      | {value = Scanner.While, ...} :: tokens' => parseWhileStatement tokens'
-      | {value = Scanner.Return, ...} :: tokens => parseReturnStatement tokens
-      | {value = Scanner.Print, ...} :: tokens' => parsePrintStatement tokens'
-      | {value = Scanner.LeftBrace, ...} :: tokens' => parseBlock tokens'
+        {value = Scanner.Fun, ...} :: _ => parseFunction ("function", tokens)
+      | {value = Scanner.Var, ...} :: _ => parseVarDeclaration tokens
+      | {value = Scanner.For, ...} :: _ => parseForStatement tokens
+      | {value = Scanner.If, ...} :: _ => parseIfStatement tokens
+      | {value = Scanner.While, ...} :: _ => parseWhileStatement tokens
+      | {value = Scanner.Return, ...} :: _ => parseReturnStatement tokens
+      | {value = Scanner.Print, ...} :: _ => parsePrintStatement tokens
+      | {value = Scanner.LeftBrace, ...} :: _ => parseBlock tokens
       | _ => parseExpressionStatement tokens
     and parseFunction (kind, tokens) =
       case tokens of
-        {value = Scanner.Identifier name, ...} :: tokens =>
+        {location = kwLocation, ...} :: { value = Scanner.Identifier name
+                                        , location = identLocation
+                                        } :: tokens =>
           (case tokens of
              {value = Scanner.LeftParen, ...} :: tokens =>
                let
                  val (parameters, tokens) = parseParameters tokens
-                 val (body, tokens) =
+                 val (body, tokens, blockLocation) =
                    case tokens of
-                     {value = Scanner.LeftBrace, ...} :: tokens =>
+                     {value = Scanner.LeftBrace, ...} :: _ =>
                        (case parseBlock tokens of
-                          (Block body, tokens) => (body, tokens)
+                          ( {value = Block body, location = blockLocation}
+                          , tokens
+                          ) =>
+                            (body, tokens, blockLocation)
                         | _ => raise Fail "Unreachable.")
                    | _ => raise Fail ("Expect '{' before " ^ kind ^ " body.")
                in
-                 (Function (name, parameters, body), tokens)
+                 ( { value = Function (name, parameters, body)
+                   , location = merge_locations [kwLocation, blockLocation]
+                   }
+                 , tokens
+                 )
                end
            | _ => raise Fail ("Expect '(' after " ^ kind ^ " name."))
       | _ => raise Fail ("Expect " ^ kind ^ " name.")
@@ -212,37 +165,48 @@ structure Parser :> PARSER =
       | _ => raise Fail "Expect parameter name."
     and parseVarDeclaration tokens =
       case tokens of
-        ({value = Scanner.Identifier ident, ...}) :: tokens' =>
-          (case matchTypes [Scanner.Equal] tokens' of
+        {location = kwLocation, ...} :: {value = Scanner.Identifier ident, ...} :: tokens =>
+          (case matchTypes [Scanner.Equal] tokens of
              NONE =>
                let
-                 val statement = Var (ident, Literal Nil)
-                 val tokens =
-                   case tokens' of
-                     {value = Scanner.Semicolon, ...} :: tokens => tokens
+                 val statement =
+                   Var (ident, {value = Literal Nil, location = Unknown})
+                 val (semiLocation, tokens) =
+                   case tokens of
+                     {value = Scanner.Semicolon, location = semiLocation} :: tokens =>
+                       (semiLocation, tokens)
                    | _ => raise Fail "Expect ';' after variable declaration."
                in
-                 (statement, tokens)
+                 ( { value = statement
+                   , location = merge_locations [kwLocation, semiLocation]
+                   }
+                 , tokens
+                 )
                end
-           | SOME (_, tokens') =>
+           | SOME (_, tokens) =>
                let
-                 val (expr, tokens') = parseExpression tokens'
-                 val tokens' =
-                   case matchTypes [Scanner.Semicolon] tokens' of
+                 val (expr, tokens) = parseExpression tokens
+                 val (semiLocation, tokens) =
+                   case matchTypes [Scanner.Semicolon] tokens of
                      NONE => raise Fail "Expect ';' after variable declaration."
-                   | SOME (_, tokens') => tokens'
+                   | SOME ({location = semiLocation, ...}, tokens) =>
+                       (semiLocation, tokens)
                in
-                 (Var (ident, expr), tokens')
+                 ( { value = Var (ident, expr)
+                   , location = merge_locations [kwLocation, semiLocation]
+                   }
+                 , tokens
+                 )
                end)
       | _ => raise Fail "Expect variable name."
     and parseForStatement tokens =
       case tokens of
-        {value = Scanner.LeftParen, ...} :: tokens =>
+        {location = kwLocation, ...} :: {value = Scanner.LeftParen, ...} :: tokens =>
           let
-            val (initializer, tokens) =
+            val (initializer : statement annotated option, tokens) =
               case tokens of
                 {value = Scanner.Semicolon, ...} :: tokens => (NONE, tokens)
-              | {value = Scanner.Var, ...} :: tokens =>
+              | {value = Scanner.Var, ...} :: _ =>
                   let val (initializer, tokens) = parseVarDeclaration tokens in
                     (SOME initializer, tokens)
                   end
@@ -275,31 +239,42 @@ structure Parser :> PARSER =
                 {value = Scanner.RightParen, ...} :: tokens => tokens
               | _ => raise Fail "Expect ')' after for clauses."
             val (body, tokens) = parseStatement tokens
+            val {location = bodyLocation, ...} = body
             val body =
               case increment of
                 NONE => body
-              | SOME increment => Block [body, Expression increment]
+              | SOME increment =>
+                  let val {location= incrLocation, ...} = increment in
+                  { location = Unknown
+                  , value = Block [body, {value = Expression increment,
+                  location=incrLocation}]
+                  }
+                  end
             val condition =
               case condition of
-                NONE => Literal True
+                NONE => {location = Unknown, value = Literal True}
               | SOME condition => condition
             val body = While (condition, body)
             val body =
               case initializer of
                 NONE => body
-              | SOME initializer => Block [initializer, body]
+              | SOME initializer =>
+                  { location = merge_locations [kwLocation, bodyLocation]
+                  , value = Block [initializer, body]
+                  }
           in
             (body, tokens)
           end
       | _ => raise Fail "Expect '(' after 'for'."
     and parseIfStatement tokens =
       case tokens of
-        {value = Scanner.LeftParen, ...} :: tokens =>
+        {location = kwLocation, ...} :: {value = Scanner.LeftParen, ...} :: tokens =>
           let val (condition, tokens) = parseExpression tokens in
             case tokens of
               {value = Scanner.RightParen, ...} :: tokens =>
                 let
                   val (thenBranch, tokens) = parseStatement tokens
+                  val {location = thenLocation, ...} = thenBranch
                   val (elseBranch, tokens) =
                     case tokens of
                       {value = Scanner.Else, ...} :: tokens =>
@@ -307,93 +282,165 @@ structure Parser :> PARSER =
                           (SOME elseBranch, tokens)
                         end
                     | _ => (NONE, tokens)
+                  val restLocation =
+                    case elseBranch of
+                      SOME {location, ...} => location
+                    | NONE => thenLocation
                 in
-                  (If (condition, thenBranch, elseBranch), tokens)
+                  ( { value = If (condition, thenBranch, elseBranch)
+                    , location = merge_locations [kwLocation, restLocation]
+                    }
+                  , tokens
+                  )
                 end
             | _ => raise Fail "Expect ')' after if condition."
           end
       | _ => raise Fail "Expect '(' after 'if'."
     and parseWhileStatement tokens =
       case tokens of
-        {value = Scanner.LeftParen, ...} :: tokens =>
+        {location = kwLocation, ...} :: {value = Scanner.LeftParen, ...} :: tokens =>
           let val (condition, tokens) = parseExpression tokens in
             case tokens of
               {value = Scanner.RightParen, ...} :: tokens =>
-                let val (body, tokens) = parseStatement tokens in
-                  (While (condition, body), tokens)
+                let
+                  val (body, tokens) = parseStatement tokens
+                  val {location, ...} = body
+                in
+                  ( { value = While (condition, body)
+                    , location = merge_locations [kwLocation, location]
+                    }
+                  , tokens
+                  )
                 end
             | _ => raise Fail "Expect ')' after condition."
           end
       | _ => raise Fail "Expect '(' after 'while'."
     and parseReturnStatement tokens =
       case tokens of
-        {value = Scanner.Semicolon, ...} :: tokens =>
-          (Return (Literal Nil), tokens)
+        {location = kwLocation, ...} :: { value = Scanner.Semicolon
+                                        , location = semiLocation
+                                        } :: tokens =>
+          ( { value = Return (Literal Nil)
+            , location = merge_locations [kwLocation, semiLocation]
+            }
+          , tokens
+          )
       | _ =>
           let val (expression, tokens) = parseExpression tokens in
             case tokens of
-              {value = Scanner.Semicolon, ...} :: tokens =>
-                (Return expression, tokens)
+              {value = Scanner.Semicolon, location = semiLocation} :: tokens =>
+                ( { value = Return expression
+                  , location = merge_locations [kwLocation, semiLocation]
+                  }
+                , tokens
+                )
             | _ => raise Fail "Expect ';' after return value."
           end
     and parsePrintStatement tokens =
-      let
-        val (expr, tokens') = parseExpression tokens
-        val tokens' =
-          case matchTypes [Scanner.Semicolon] tokens' of
-            NONE => raise Fail "Expect ';' after value."
-          | SOME (_, tokens') => tokens'
-      in
-        (Print expr, tokens')
-      end
+      case tokens of
+        {location = kwLocation, ...} :: _ =>
+          let
+            val (expr, tokens) = parseExpression tokens
+            val tokens =
+              case matchTypes [Scanner.Semicolon] tokens of
+                NONE => raise Fail "Expect ';' after value."
+              | SOME (_, tokens) => tokens
+          in
+            (Print expr, tokens)
+          end
+      | _ => raise Fail "unreachable"
     and parseBlock tokens = parseBlock' tokens []
     and parseBlock' tokens acc =
       case tokens of
-        [] => raise Fail "Expect '}' after block."
-      | {value = Scanner.RightBrace, ...} :: tokens =>
-          (Block (List.rev acc), tokens)
-      | _ =>
-          let val (statement, tokens) = parseStatement tokens in
-            parseBlock' tokens (statement :: acc)
-          end
+        {location = lBraceLocation, ...} :: tokens =>
+          (case tokens of
+             [] => raise Fail "Expect '}' after block."
+           | {value = Scanner.RightBrace, location = rBraceLocation} :: tokens =>
+               ( { value = Block (List.rev acc)
+                 , location = merge_locations [lBraceLocation, rBraceLocation]
+                 }
+               , tokens
+               )
+           | _ =>
+               let val (statement, tokens) = parseStatement tokens in
+                 parseBlock' tokens (statement :: acc)
+               end)
+      | _ => raise Fail "unreachable"
     and parseExpressionStatement tokens =
       let
-        val (expr, tokens') = parseExpression tokens
-        val tokens' =
-          case matchTypes [Scanner.Semicolon] tokens' of
+        val (expr, tokens) =
+          parseExpression tokens var {location = exprLocation} = expr
+        val (semiLocation, tokens) =
+          case matchTypes [Scanner.Semicolon] tokens of
             NONE => raise Fail "Expect ';' after expression."
-          | SOME (_, tokens') => tokens'
+          | SOME ({location = semiLocation, ...}, tokens) =>
+              (semiLocation, tokens)
       in
-        (Expression expr, tokens')
+        ( { value = Expression expr
+          , location = merge_locations [exprLocation, semiLocation]
+          }
+        , tokens
+        )
       end
     and parseExpression tokens = parseAssignment tokens
     and parseAssignment tokens =
-      let val (left, tokens) = parseOr tokens in
+      let
+        val (left, tokens) = parseOr tokens
+        val {location = leftLocation, ...} = left
+      in
         case matchTypes [Scanner.Equal] tokens of
           NONE => (left, tokens)
         | SOME (_, tokens) =>
-            let val (value, tokens) = parseAssignment tokens in
+            let
+              val (value, tokens) = parseAssignment tokens
+              val {location = valueLocation, ...} = value
+            in
               case left of
-                Variable ident => (Assign (ident, value), tokens)
+                {value = Variable ident, ...} =>
+                  ( { value = Assign (ident, value)
+                    , location = merge_locations [leftLocation, valueLocation]
+                    }
+                  , tokens
+                  )
               | _ => raise Fail "Expected ident."
             end
       end
     and parseOr tokens =
-      let val (left, tokens) = parseAnd tokens in
+      let
+        val (left, tokens) = parseAnd tokens
+        val {location = leftLocation, ...} = left
+      in
         case matchTypes [Scanner.Or] tokens of
           NONE => (left, tokens)
         | SOME (_, tokens) =>
-            let val (right, tokens) = parseOr tokens in
-              (Logical (Or, left, right), tokens)
+            let
+              val (right, tokens) = parseOr tokens
+              val {location = rightLocation, ...} = right
+            in
+              ( { value = Logical (Or, left, right)
+                , location = merge_locations [leftLocation, rightLocation]
+                }
+              , tokens
+              )
             end
       end
     and parseAnd tokens =
-      let val (left, tokens) = parseEquality tokens in
+      let
+        val (left, tokens) = parseEquality tokens
+        val {location = leftLocation, ...} = left
+      in
         case matchTypes [Scanner.And] tokens of
           NONE => (left, tokens)
         | SOME (_, tokens) =>
-            let val (right, tokens) = parseAnd tokens in
-              (Logical (And, left, right), tokens)
+            let
+              val (right, tokens) = parseAnd tokens
+              val {location = rightLocation, ...} = right
+            in
+              ( { value = Logical (And, left, right)
+                , location = merge_locations [leftLocation, rightLocation]
+                }
+              , tokens
+              )
             end
       end
     and parseEquality tokens =
@@ -411,9 +458,17 @@ structure Parser :> PARSER =
     and parseUnary tokens =
       case matchTypes [Scanner.Bang, Scanner.Minus] tokens of
         NONE => parseCall tokens
-      | SOME (token, tokens') =>
-          let val (expr, tokens') = parseUnary tokens' in
-            (Unary (tokenToUnop token, expr), tokens')
+      | SOME (token, tokens) =>
+          let
+            val (expr, tokens) = parseUnary tokens
+            val {location = opLocation, ...} = token
+            val {location = exprLocation, ...} = expr
+          in
+            ( { value = Unary (tokenToUnop token, expr)
+              , location = merge_locations [opLocation, exprLocation]
+              }
+            , tokens
+            )
           end
     and parseCall tokens =
       let val (callee, tokens) = parsePrimary tokens in
@@ -431,34 +486,57 @@ structure Parser :> PARSER =
       if length acc >= 255 then
         raise Fail "Can't have more than 255 arguments."
       else
-        case tokens of
-          {value = Scanner.RightParen, ...} :: tokens =>
-            (Call (callee, List.rev acc), tokens)
-        | _ =>
-            let val (argument, tokens) = parseExpression tokens in
-              case tokens of
-                {value = Scanner.RightParen, ...} :: tokens =>
-                  (Call (callee, List.rev (argument :: acc)), tokens)
-              | {value = Scanner.Comma, ...} :: tokens =>
-                  finishCall' (callee, tokens) (argument :: acc)
-              | _ => raise Fail "Expect ')' after arguments."
-            end
+        let val {location = calleeLocation, ...} = callee in
+          case tokens of
+            {value = Scanner.RightParen, location = rParenLocation} :: tokens =>
+              ( { value = Call (callee, List.rev acc)
+                , location = merge_locations [calleeLocation, rParenLocation]
+                }
+              , tokens
+              )
+          | _ =>
+              let val (argument, tokens) = parseExpression tokens in
+                case tokens of
+                  {value = Scanner.RightParen, location = rParenLocation} :: tokens =>
+                    ( { value = Call (callee, List.rev (argument :: acc))
+                      , location =
+                          merge_locations [calleeLocation, rParenLocation]
+                      }
+                    , tokens
+                    )
+                | {value = Scanner.Comma, ...} :: tokens =>
+                    finishCall' (callee, tokens) (argument :: acc)
+                | _ => raise Fail "Expect ')' after arguments."
+              end
+        end
     and parsePrimary tokens =
       case tokens of
         [] => raise Fail "Unable to parse primary from empty tokens"
-      | token :: tokens' =>
+      | token :: tokens =>
           case token of
-            {value = Scanner.False, ...} => (Literal False, tokens')
-          | {value = Scanner.True, ...} => (Literal True, tokens')
-          | {value = Scanner.Nil, ...} => (Literal Nil, tokens')
-          | {value = Scanner.Number r, ...} => (Literal (Number r), tokens')
-          | {value = Scanner.String s, ...} => (Literal (String s), tokens')
-          | {value = Scanner.LeftParen, ...} =>
-              let val (expr, tokens') = parseExpression tokens' in
-                case matchTypes [Scanner.RightParen] tokens' of
+            {value = Scanner.False, location} =>
+              ({value = Literal False, location = location}, tokens)
+          | {value = Scanner.True, location} =>
+              ({value = Literal True, location = location}, tokens)
+          | {value = Scanner.Nil, location} =>
+              ({value = Literal Nil, location = loation}, tokens)
+          | {value = Scanner.Number r, location} =>
+              ({value = Literal (Number r), location = location}, tokens)
+          | {value = Scanner.String s, location} =>
+              ({value = Literal (String s), location = location}, tokens)
+          | {value = Scanner.LeftParen, location = lParenLocation} =>
+              let val (expr, tokens) = parseExpression tokens in
+                case matchTypes [Scanner.RightParen] tokens of
                   NONE => raise Fail "Expect ')' after expression."
-                | SOME (token, tokens') => (Grouping expr, tokens')
+                | SOME ({location = rParenLocation, ...}, tokens) =>
+                    ( { value = Grouping expr
+                      , location =
+                          merge_locations [lParenLocation, rParenLocation]
+                      }
+                    , tokens
+                    )
               end
-          | {value = Scanner.Identifier ident, ...} => (Variable ident, tokens')
+          | {value = Scanner.Identifier ident, location} =>
+              ({value = Variable ident, location = location}, tokens)
           | _ => raise Fail "Expect expression."
   end

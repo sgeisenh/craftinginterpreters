@@ -17,29 +17,27 @@ signature PARSER =
     datatype unary_operator = Negative | Bang
     datatype expr =
       Assign of (string * expr Common.annotated)
-    | Binary of (binary_operator * expr Common.annotated * expr Common.annotated)
+    | Binary of
+               (binary_operator * expr Common.annotated * expr Common.annotated)
     | Call of (expr Common.annotated * (expr Common.annotated) list)
     | Grouping of expr Common.annotated
     | Literal of literal
-    | Logical of (logical_operator * expr Common.annotated * expr Common.annotated)
+    | Logical of
+                (logical_operator * expr Common.annotated * expr Common.annotated)
     | Unary of (unary_operator * expr Common.annotated)
     | Variable of string
     datatype statement =
-      Block of (statement Common.annotated)list
+      Block of (statement Common.annotated) list
     | Expression of expr Common.annotated
-    | Function of (string * string list * (statement Common.annotated)list)
-    | If of (expr Common.annotated * statement Common.annotated * (statement Common.annotated) option)
+    | Function of (string * string list * (statement Common.annotated) list)
+    | If of
+           (expr Common.annotated * statement Common.annotated * (statement Common.annotated) option)
     | While of (expr Common.annotated * statement Common.annotated)
     | Print of expr Common.annotated
     | Return of expr Common.annotated
     | Var of (string * expr Common.annotated)
 
-    val binOpToString : binary_operator -> string
-    val unaryOpToString : unary_operator -> string
-    val literalToString : literal -> string
-    val exprToString : expr -> string
-
     val parse : (Scanner.token Common.annotated) list -> ( (statement Common.annotated) list
-                                               , Common.error list
-                                               ) Common.result
+                                                         , Common.error list
+                                                         ) Common.result
   end
