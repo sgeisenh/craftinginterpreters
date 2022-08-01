@@ -104,9 +104,22 @@ structure Parser :> PARSER =
       )
 
     fun parse tokens =
-      let val statements = parseStatements tokens in
-        Common.Success statements
+      let val declarations = parseDeclarations tokens in
+        Common.Success declarations
       end
+    and parseDeclarations tokens = parseDeclarations' (tokens, [])
+    and parseDeclarations' (tokens, acc) =
+      case tokens of
+           [] => List.rev acc
+         | [{value = Scanner.Eof, ...}] => List.rev acc
+         | _ => let val (declaration, tokens) = parseDeclaration tokens in
+           parseDeclarations' (tokens, declaration :: acc)
+                end
+    and parseDeclaration tokens =
+      case tokens of
+        {value = Scanner.Fun, ...} :: _ => parseFunction ("function", tokens)
+      | {value = Scanner.Var, ...} :: _ => parseVarDeclaration tokens
+      | _ => parseStatement tokens
     and parseStatements tokens = parseStatements' (tokens, [])
     and parseStatements' (tokens, acc) =
       case tokens of
@@ -118,9 +131,7 @@ structure Parser :> PARSER =
           end
     and parseStatement tokens =
       case tokens of
-        {value = Scanner.Fun, ...} :: _ => parseFunction ("function", tokens)
-      | {value = Scanner.Var, ...} :: _ => parseVarDeclaration tokens
-      | {value = Scanner.For, ...} :: _ => parseForStatement tokens
+        {value = Scanner.For, ...} :: _ => parseForStatement tokens
       | {value = Scanner.If, ...} :: _ => parseIfStatement tokens
       | {value = Scanner.While, ...} :: _ => parseWhileStatement tokens
       | {value = Scanner.Return, ...} :: _ => parseReturnStatement tokens
@@ -383,8 +394,8 @@ structure Parser :> PARSER =
       | {value = Scanner.RightBrace, location = rBraceLocation} :: tokens =>
           (Block (List.rev acc), rBraceLocation, tokens)
       | _ =>
-          let val (statement, tokens) = parseStatement tokens in
-            parseBlock' tokens (statement :: acc)
+          let val (declaration, tokens) = parseDeclaration tokens in
+            parseBlock' tokens (declaration :: acc)
           end
     and parseExpressionStatement tokens =
       let

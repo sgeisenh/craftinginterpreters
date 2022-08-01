@@ -28,7 +28,7 @@ fun run environment program =
   end
 
 fun runFile filename =
-  let val program = TextIO.input (TextIO.openIn filename) in
+  let val program = TextIO.inputAll (TextIO.openIn filename) in
     run (Environment.make globals) program
   end
 
