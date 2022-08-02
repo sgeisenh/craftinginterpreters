@@ -23,7 +23,8 @@ fun run environment program =
         boundAstOrErrors
   in
     case successOrFailure of
-      Failure errors => Common.print_errors program errors
+      Failure errors =>
+        (Common.print_errors program errors; OS.Process.exit OS.Process.failure)
     | _ => ()
   end
 

@@ -23,13 +23,16 @@ structure Parser :> PARSER =
       Assign of ((string * int option) * expr annotated)
     | Binary of (binary_operator * expr annotated * expr annotated)
     | Call of (expr annotated * expr annotated list)
+    | Get of (expr annotated * string)
     | Grouping of expr annotated
     | Literal of literal
     | Logical of (logical_operator * expr annotated * expr annotated)
+    | Set of (expr annotated * string * expr annotated)
     | Unary of (unary_operator * expr annotated)
     | Variable of string * int option
     datatype statement =
       Block of statement annotated list
+    | Class of string * statement annotated list
     | Expression of expr annotated
     | Function of (string * string list * statement annotated list)
     | If of (expr annotated * statement annotated * statement annotated option)
@@ -110,14 +113,17 @@ structure Parser :> PARSER =
     and parseDeclarations tokens = parseDeclarations' (tokens, [])
     and parseDeclarations' (tokens, acc) =
       case tokens of
-           [] => List.rev acc
-         | [{value = Scanner.Eof, ...}] => List.rev acc
-         | _ => let val (declaration, tokens) = parseDeclaration tokens in
-           parseDeclarations' (tokens, declaration :: acc)
-                end
+        [] => List.rev acc
+      | [{value = Scanner.Eof, ...}] => List.rev acc
+      | _ =>
+          let val (declaration, tokens) = parseDeclaration tokens in
+            parseDeclarations' (tokens, declaration :: acc)
+          end
     and parseDeclaration tokens =
       case tokens of
-        {value = Scanner.Fun, ...} :: _ => parseFunction ("function", tokens)
+        {value = Scanner.Class, ...} :: _ => parseClassDeclaration tokens
+      | {value = Scanner.Fun, location = startLocation} :: tokens =>
+          parseFunction ("function", tokens) startLocation
       | {value = Scanner.Var, ...} :: _ => parseVarDeclaration tokens
       | _ => parseStatement tokens
     and parseStatements tokens = parseStatements' (tokens, [])
@@ -138,11 +144,38 @@ structure Parser :> PARSER =
       | {value = Scanner.Print, ...} :: _ => parsePrintStatement tokens
       | {value = Scanner.LeftBrace, ...} :: _ => parseBlock tokens
       | _ => parseExpressionStatement tokens
-    and parseFunction (kind, tokens) =
+    and parseClassDeclaration tokens =
       case tokens of
-        {location = kwLocation, ...} :: { value = Scanner.Identifier name
-                                        , location = identLocation
-                                        } :: tokens =>
+        {location = kwLocation, ...} :: {value = Scanner.Identifier name, ...} :: { value = Scanner.LeftBrace
+                                                                                  , ...
+                                                                                  } :: tokens =>
+          let
+            fun parseMethods tokens acc =
+              case tokens of
+                {value = Scanner.RightBrace, ...} :: _ => (List.rev acc, tokens)
+              | {location = startLocation, ...} :: _ =>
+                  let
+                    val (function, tokens) =
+                      parseFunction ("method", tokens) startLocation
+                  in
+                    parseMethods tokens (function :: acc)
+                  end
+              | _ => raise Fail "Expected method name or right brace"
+            val (methods, tokens) = parseMethods tokens []
+          in
+            case tokens of
+              {value = Scanner.RightBrace, location = rBraceLocation} :: tokens =>
+                ( { value = Class (name, methods)
+                  , location = merge_locations [kwLocation, rBraceLocation]
+                  }
+                , tokens
+                )
+            | _ => raise Fail "Expected right brace after class definition"
+          end
+      | _ => raise Fail "Expect class name and left brace."
+    and parseFunction (kind, tokens) startLocation =
+      case tokens of
+        {value = Scanner.Identifier name, location = identLocation} :: tokens =>
           (case tokens of
              {value = Scanner.LeftParen, ...} :: tokens =>
                let
@@ -159,7 +192,7 @@ structure Parser :> PARSER =
                    | _ => raise Fail ("Expect '{' before " ^ kind ^ " body.")
                in
                  ( { value = Function (name, parameters, body)
-                   , location = merge_locations [kwLocation, blockLocation]
+                   , location = merge_locations [startLocation, blockLocation]
                    }
                  , tokens
                  )
@@ -433,6 +466,12 @@ structure Parser :> PARSER =
                     }
                   , tokens
                   )
+              | {value = Get (expr, ident), ...} =>
+                  ( { value = Set (expr, ident, value)
+                  , location = merge_locations [leftLocation, valueLocation]
+                  }
+                  , tokens
+                  )
               | _ => raise Fail "Expected ident."
             end
       end
@@ -510,6 +549,20 @@ structure Parser :> PARSER =
         {value = Scanner.LeftParen, ...} :: tokens =>
           let val (callee, tokens) = finishCall (callee, tokens) in
             parseCalls (callee, tokens)
+          end
+      | {value = Scanner.Dot, location} :: tokens =>
+          let
+            val (name, tokens, identLocation) =
+              case tokens of
+                {value = Scanner.Identifier ident, location = identLocation} :: tokens =>
+                  (ident, tokens, identLocation)
+              | _ => raise Fail "Expect property name after '.'."
+          in
+            ( { value = Get (callee, name)
+              , location = merge_locations [location, identLocation]
+              }
+            , tokens
+            )
           end
       | _ => (callee, tokens)
     and finishCall (callee, tokens) = finishCall' (callee, tokens) []

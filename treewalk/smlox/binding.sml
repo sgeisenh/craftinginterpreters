@@ -3,19 +3,53 @@ structure Binding :> BINDING =
     open Parser
     val nonsenseValue = LoxValue.Nil
 
+    val peek = hd
+
+    fun isGlobal [_] = true
+      | isGlobal _ = false
+
+    fun getFrom [] ident _ = raise Fail "Not that many levels"
+      | getFrom (curr :: _) ident 0 = HashTable.inDomain curr
+      | getFrom (curr :: rest) ident n = getFrom rest ident (n - 1)
+
     fun declare context ident =
       let
-        val global = Environment.isGlobal context
-        fun isNew () =
-          (Environment.getFrom context ident 0; false)
-            handle Fail _ => true
+        val curr = peek context
+        val global = isGlobal context
+        fun alreadyDeclared () = HashTable.inDomain curr ident
       in
-        if global orelse isNew () then
-          Environment.declare context (ident, nonsenseValue)
-        else
+        if not global andalso alreadyDeclared () then
           raise
             Fail ("Redeclaring variable " ^ ident ^ " outside global scope.")
+        else
+          HashTable.insert curr (ident, false)
       end
+
+    fun define context ident = HashTable.insert (peek context) (ident, true)
+
+    fun makeInner () =
+      HashTable.mkTable
+        (HashString.hashString, fn (left, right) => left = right)
+        (256, Fail "Unknown variable.")
+
+    fun make globals =
+      let val context = makeInner () in
+        app (HashTable.insert context) (map (fn x => (x, true)) globals);
+        [context]
+      end
+
+    fun makeNested context = makeInner () :: context
+
+    fun getJumps' [] ident level = raise Fail "Unknown variable."
+      | getJumps' (curr :: rest) ident level =
+        case HashTable.find curr ident of
+          SOME defined =>
+            if defined then
+              level
+            else
+              raise Fail "Can't refer to a variable within its own declaration."
+        | NONE => getJumps' rest ident (level + 1)
+    fun getJumps context ident = getJumps' context ident 0
 
     fun attachBindings' context = map (attachBinding context)
     and attachBinding context (statement : statement Common.annotated) =
@@ -23,9 +57,11 @@ structure Binding :> BINDING =
         val {value = statement, location} = statement
         val statement =
           case statement of
-            Block statements =>
+            Class (name, _) =>
+              (declare context name; define context name; statement)
+          | Block statements =>
               let
-                val context = Environment.makeNested context
+                val context = makeNested context
                 val statements = attachBindings' context statements
               in
                 Block statements
@@ -37,8 +73,12 @@ structure Binding :> BINDING =
           | Function (ident, params, body) =>
               let
                 val () = declare context ident
-                val context = Environment.makeNested context
-                val () = List.app (declare context) params
+                val () = define context ident
+                val context = makeNested context
+                val () =
+                  List.app
+                    (fn param => (declare context param; define context param))
+                    params
                 val body = attachBindings' context body
               in
                 Function (ident, params, body)
@@ -65,11 +105,11 @@ structure Binding :> BINDING =
               let val expr = attachBindingToExpr context expr in Print expr end
           | Return expr =>
               let val expr = attachBindingToExpr context expr in Return expr end
-          (* TODO: Make it an error to reference variable inside of initializer *)
           | Var (ident, expr) =>
               let
-                val expr = attachBindingToExpr context expr
                 val () = declare context ident
+                val expr = attachBindingToExpr context expr
+                val () = define context ident
               in
                 Var (ident, expr)
               end
@@ -84,7 +124,7 @@ structure Binding :> BINDING =
             Assign ((ident, _), expr) =>
               let
                 val expr = attachBindingToExpr context expr
-                val binding = Environment.getJumps context ident
+                val binding = getJumps context ident
               in
                 Assign ((ident, SOME binding), expr)
               end
@@ -119,19 +159,23 @@ structure Binding :> BINDING =
                 Unary (operator, operand)
               end
           | Variable (ident, _) =>
-              let val binding = Environment.getJumps context ident in
+              let val binding = getJumps context ident in
                 Variable (ident, SOME binding)
+              end
+          | Get (expr, name) => Get (attachBindingToExpr context expr, name)
+          | Set (expr, ident, value) =>
+              let
+                val expr = attachBindingToExpr context expr
+                val value = attachBindingToExpr context value
+              in
+                Set (expr, ident, value)
               end
       in
         {value = expr, location = location}
       end
 
     fun attachBindings initialEnvironment statements =
-      let
-        val context =
-          Environment.make
-            (map (fn ident => (ident, nonsenseValue)) initialEnvironment)
-      in
+      let val context = make initialEnvironment in
         Common.Success (attachBindings' context statements)
       end
   end

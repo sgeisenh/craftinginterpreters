@@ -1,13 +1,25 @@
 structure LoxValue :> LOX_VALUE =
   struct
+    type classType = string
+
     datatype t =
       Nil
     | Boolean of bool
     | Number of real
     | String of string
     | Function of t list -> t
+    | Class of classType
+    | Instance of classType * (string, t) HashTable.hash_table
 
     exception RuntimeError of string
+
+    fun create_instance cls =
+    let
+      val fields = HashTable.mkTable (HashString.hashString, fn (left, right) =>
+      left = right) (256, RuntimeError "Undefined property")
+    in
+      Instance (cls, fields)
+    end
 
     fun eq (Nil, Nil) = Boolean (true)
       | eq (Boolean left, Boolean right) = Boolean (left = right)
@@ -55,7 +67,18 @@ structure LoxValue :> LOX_VALUE =
     fun call (callee, arguments) =
       case callee of
         Function function => function arguments
+      | Class cls => create_instance cls
       | _ => raise RuntimeError "can only call functions."
+
+    fun get obj property =
+      case obj of
+           Instance (cls, fields) => HashTable.lookup fields property
+         | _ => raise RuntimeError "Only instances have properties"
+
+    fun set obj ident value =
+      case obj of
+           Instance (cls, fields) => HashTable.insert fields (ident, value)
+         | _ => raise RuntimeError "Only instances have fields"
 
     fun isTruthy (Boolean false) = false
       | isTruthy Nil = false
@@ -69,4 +92,6 @@ structure LoxValue :> LOX_VALUE =
       | Number r => Real.toString r
       | String s => s
       | Function function => "<function>"
+      | Class name => name
+      | Instance (cls, _) => cls ^ " instance"
   end

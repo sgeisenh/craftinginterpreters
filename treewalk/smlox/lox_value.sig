@@ -6,6 +6,10 @@ signature LOX_VALUE =
     | Number of real
     | String of string
     | Function of t list -> t
+    | Class of string
+    | Instance of string * (string, t) HashTable.hash_table
+    
+    val create_instance : string -> t
 
     exception RuntimeError of string
 
@@ -22,6 +26,8 @@ signature LOX_VALUE =
     val negate : t -> t
     val logicalNot : t -> t
     val call : (t * t list) -> t
+    val get : t -> string -> t
+    val set : t -> string -> t -> unit
 
     val isTruthy : t -> bool
 

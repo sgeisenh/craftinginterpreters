@@ -20,6 +20,8 @@ signature PARSER =
     | Binary of
                (binary_operator * expr Common.annotated * expr Common.annotated)
     | Call of (expr Common.annotated * (expr Common.annotated) list)
+    | Get of (expr Common.annotated * string)
+    | Set of (expr Common.annotated * string * expr Common.annotated)
     | Grouping of expr Common.annotated
     | Literal of literal
     | Logical of
@@ -28,6 +30,7 @@ signature PARSER =
     | Variable of string * int option
     datatype statement =
       Block of (statement Common.annotated) list
+    | Class of (string * statement Common.annotated list)
     | Expression of expr Common.annotated
     | Function of (string * string list * (statement Common.annotated) list)
     | If of

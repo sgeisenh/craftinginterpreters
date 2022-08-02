@@ -72,6 +72,19 @@ structure Interpreter =
               else
                 left
             end
+        | Get (obj, ident) =>
+            let
+              val obj = evaluateExpr environment obj
+            in
+              LoxValue.get obj ident
+            end
+        | Set (obj, ident, value) =>
+            let
+              val obj = evaluateExpr environment obj
+              val value = evaluateExpr environment value
+            in
+              (LoxValue.set obj ident value; value)
+            end
       end
 
     fun evaluateStatement environment ogStatement =
@@ -80,6 +93,8 @@ structure Interpreter =
           Block statements =>
             List.app (evaluateStatement (Environment.makeNested environment))
               statements
+        | Class (name, _) =>
+            Environment.declare environment (name, LoxValue.Class name)
         | Expression expr => (evaluateExpr environment expr; ())
         | Function (name, parameters, body) =>
             let
