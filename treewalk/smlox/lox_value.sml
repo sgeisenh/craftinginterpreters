@@ -90,7 +90,13 @@ structure LoxValue :> LOX_VALUE =
         Nil => "nil"
       | Boolean true => "true"
       | Boolean false => "false"
-      | Number r => Real.toString r
+      | Number r =>
+          (let
+            val fl = floor r
+            val frac = r - real fl
+          in if Real.==(frac, 0.0) then
+        Int.toString fl else Real.toString r
+          end handle Overflow => Real.toString r)
       | String s => s
       | Function function => "<function>"
       | Class (name, ctx) => name
