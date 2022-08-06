@@ -73,9 +73,7 @@ structure Interpreter =
                 left
             end
         | Get (obj, ident) =>
-            let
-              val obj = evaluateExpr environment obj
-            in
+            let val obj = evaluateExpr environment obj in
               LoxValue.get obj ident
             end
         | Set (obj, ident, value) =>
@@ -87,14 +85,22 @@ structure Interpreter =
             end
       end
 
-    fun evaluateStatement environment ogStatement =
+    fun evaluateStatement environment print ogStatement =
       let val {value = statement, ...} = ogStatement in
         case statement of
           Block statements =>
-            List.app (evaluateStatement (Environment.makeNested environment))
+            List.app (evaluateStatement (Environment.makeNested environment)
+            print)
               statements
         | Class (name, _) =>
-            Environment.declare environment (name, LoxValue.Class name)
+            Environment.declare environment
+              ( name
+              , LoxValue.Class
+                  ( name
+                  , StringTable.mkTable
+                      (256, Fail "Wat")
+                  )
+              )
         | Expression expr => (evaluateExpr environment expr; ())
         | Function (name, parameters, body) =>
             let
@@ -105,7 +111,7 @@ structure Interpreter =
                   let val newEnvironment = Environment.makeNested environment in
                     ( List.app (Environment.declare newEnvironment)
                         (ListPair.zip (parameters, arguments))
-                    ; List.app (evaluateStatement newEnvironment) body
+                    ; List.app (evaluateStatement newEnvironment print) body
                     ; LoxValue.Nil
                     )
                   end
@@ -115,15 +121,15 @@ structure Interpreter =
         | If (condition, thenBranch, elseBranch) =>
             let val conditionResult = evaluateExpr environment condition in
               if LoxValue.isTruthy conditionResult then
-                evaluateStatement environment thenBranch
+                evaluateStatement environment print thenBranch
               else
-                Option.app (evaluateStatement environment) elseBranch
+                Option.app (evaluateStatement environment print) elseBranch
             end
         | While (condition, body) =>
             let val conditionResult = evaluateExpr environment condition in
               if LoxValue.isTruthy conditionResult then
-                ( evaluateStatement environment body
-                ; evaluateStatement environment ogStatement
+                ( evaluateStatement environment print body
+                ; evaluateStatement environment print ogStatement
                 )
               else
                 ()
@@ -142,5 +148,6 @@ structure Interpreter =
             end
       end
 
-    fun interpret environment = List.app (evaluateStatement environment)
+    fun interpret environment print = List.app (evaluateStatement environment
+      print)
   end

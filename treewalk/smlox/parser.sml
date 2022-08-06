@@ -45,13 +45,15 @@ structure Parser :> PARSER =
       case tokens of
         [] => NONE
       | token :: tokens =>
+          let val { value, location = _ } = token in
           if
-            List.exists (fn typ => Scanner.tokenEqual (typ, # value token))
+            List.exists (fn typ => Scanner.tokenEqual (typ, value))
               types
           then
             SOME (token, tokens)
           else
             NONE
+  end
 
     fun tokenToBinop annToken =
       let val {value, location} = annToken in
@@ -468,8 +470,8 @@ structure Parser :> PARSER =
                   )
               | {value = Get (expr, ident), ...} =>
                   ( { value = Set (expr, ident, value)
-                  , location = merge_locations [leftLocation, valueLocation]
-                  }
+                    , location = merge_locations [leftLocation, valueLocation]
+                    }
                   , tokens
                   )
               | _ => raise Fail "Expected ident."

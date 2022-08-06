@@ -9,32 +9,31 @@ structure Binding :> BINDING =
       | isGlobal _ = false
 
     fun getFrom [] ident _ = raise Fail "Not that many levels"
-      | getFrom (curr :: _) ident 0 = HashTable.inDomain curr
+      | getFrom (curr :: _) ident 0 = StringTable.inDomain curr
       | getFrom (curr :: rest) ident n = getFrom rest ident (n - 1)
 
     fun declare context ident =
       let
         val curr = peek context
         val global = isGlobal context
-        fun alreadyDeclared () = HashTable.inDomain curr ident
+        fun alreadyDeclared () = StringTable.inDomain curr ident
       in
         if not global andalso alreadyDeclared () then
           raise
             Fail ("Redeclaring variable " ^ ident ^ " outside global scope.")
         else
-          HashTable.insert curr (ident, false)
+          StringTable.insert curr (ident, false)
       end
 
-    fun define context ident = HashTable.insert (peek context) (ident, true)
+    fun define context ident = StringTable.insert (peek context) (ident, true)
 
     fun makeInner () =
-      HashTable.mkTable
-        (HashString.hashString, fn (left, right) => left = right)
+      StringTable.mkTable
         (256, Fail "Unknown variable.")
 
     fun make globals =
       let val context = makeInner () in
-        app (HashTable.insert context) (map (fn x => (x, true)) globals);
+        app (StringTable.insert context) (map (fn x => (x, true)) globals);
         [context]
       end
 
@@ -42,7 +41,7 @@ structure Binding :> BINDING =
 
     fun getJumps' [] ident level = raise Fail "Unknown variable."
       | getJumps' (curr :: rest) ident level =
-        case HashTable.find curr ident of
+        case StringTable.find curr ident of
           SOME defined =>
             if defined then
               level
@@ -57,8 +56,11 @@ structure Binding :> BINDING =
         val {value = statement, location} = statement
         val statement =
           case statement of
-            Class (name, _) =>
-              (declare context name; define context name; statement)
+            Class (name, methods) =>
+              ( declare context name
+              ; define context name
+              ; Class (name, attachBindings' context methods)
+              )
           | Block statements =>
               let
                 val context = makeNested context

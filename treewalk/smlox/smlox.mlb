@@ -1,8 +1,17 @@
-(* import libraries *)
+(* libraries *)
 $(SML_LIB)/basis/basis.mlb
-$(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
+$(SML_LIB)/smlnj-lib/Util/lib-base-sig.sml
+$(SML_LIB)/smlnj-lib/Util/lib-base.sml
+$(SML_LIB)/smlnj-lib/Util/hash-key-sig.sml
+$(SML_LIB)/smlnj-lib/Util/mono-hash-table-sig.sml
+$(SML_LIB)/smlnj-lib/Util/hash-table-sig.sml
+$(SML_LIB)/smlnj-lib/Util/hash-table-rep.sml
+$(SML_LIB)/smlnj-lib/Util/hash-table-fn.sml
 
 (* program files *)
+runtime.sig
+fnv_hash.sml
+string_table.sml
 common.sig
 common.sml
 lox_value.sig
