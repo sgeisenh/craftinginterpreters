@@ -1,35 +1,35 @@
 functor SmLox (R : RUNTIME) =
-struct
-  open Common
+  struct
+    open Common
 
-  val startTimeSecs = Time.toReal (Time.now ())
+    val startTimeSecs = Time.toReal (Time.now ())
 
-  val globals =
-    [ ( "clock"
-      , LoxValue.Function
-          (fn _ :: _ => raise Fail "clock accepts 0 arguments"
-            | _ => LoxValue.Number (Time.toReal (Time.now ()) - startTimeSecs))
-      )
-    ]
+    val globals =
+      [ ( "clock"
+        , LoxValue.Function
+            (fn _ :: _ => raise Fail "clock accepts 0 arguments"
+              | _ => LoxValue.Number (Time.toReal (Time.now ()) - startTimeSecs))
+        )
+      ]
 
-  fun run environment program =
-    let
-      val scanner = Scanner.make program
-      val tokensOrErrors = Scanner.scanTokens scanner
-      val astOrErrors = bind Parser.parse tokensOrErrors
-      val boundGlobalNames = map (fn (name, _) => name) globals
-      val boundAstOrErrors =
-        bind (Binding.attachBindings boundGlobalNames) astOrErrors
-      val successOrFailure =
-        bind (fn ast => Success (Interpreter.interpret environment R.print ast))
-          boundAstOrErrors
-    in
-      case successOrFailure of
-        Failure errors =>
-          (Common.print_errors program errors; raise Fail "Errors")
-      | _ => ()
-    end
+    fun run environment program =
+      let
+        val scanner = Scanner.make program
+        val tokensOrErrors = Scanner.scanTokens scanner
+        val astOrErrors = bind Parser.parse tokensOrErrors
+        val boundGlobalNames = map (fn (name, _) => name) globals
+        val boundAstOrErrors =
+          bind (Binding.attachBindings boundGlobalNames) astOrErrors
+        val successOrFailure =
+          bind
+            (fn ast => Success (Interpreter.interpret environment R.print ast))
+            boundAstOrErrors
+      in
+        case successOrFailure of
+          Failure errors =>
+            (Common.print_errors program errors; raise Fail "Errors")
+        | _ => ()
+      end
 
-  fun runProgram program =
-    run (Environment.make globals) program
-end
+    fun runProgram program = run (Environment.make globals) program
+  end

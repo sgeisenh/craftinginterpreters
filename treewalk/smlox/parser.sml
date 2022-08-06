@@ -45,15 +45,14 @@ structure Parser :> PARSER =
       case tokens of
         [] => NONE
       | token :: tokens =>
-          let val { value, location = _ } = token in
-          if
-            List.exists (fn typ => Scanner.tokenEqual (typ, value))
-              types
-          then
-            SOME (token, tokens)
-          else
-            NONE
-  end
+          let val {value, location = _} = token in
+            if
+              List.exists (fn typ => Scanner.tokenEqual (typ, value)) types
+            then
+              SOME (token, tokens)
+            else
+              NONE
+          end
 
     fun tokenToBinop annToken =
       let val {value, location} = annToken in

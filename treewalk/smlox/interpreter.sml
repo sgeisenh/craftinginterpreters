@@ -89,17 +89,13 @@ structure Interpreter =
       let val {value = statement, ...} = ogStatement in
         case statement of
           Block statements =>
-            List.app (evaluateStatement (Environment.makeNested environment)
-            print)
+            List.app
+              (evaluateStatement (Environment.makeNested environment) print)
               statements
         | Class (name, _) =>
             Environment.declare environment
               ( name
-              , LoxValue.Class
-                  ( name
-                  , StringTable.mkTable
-                      (256, Fail "Wat")
-                  )
+              , LoxValue.Class (name, StringTable.mkTable (256, Fail "Wat"))
               )
         | Expression expr => (evaluateExpr environment expr; ())
         | Function (name, parameters, body) =>
@@ -148,6 +144,6 @@ structure Interpreter =
             end
       end
 
-    fun interpret environment print = List.app (evaluateStatement environment
-      print)
+    fun interpret environment print =
+      List.app (evaluateStatement environment print)
   end

@@ -1,4 +1,4 @@
 signature RUNTIME =
-sig
-  val print : string -> unit;
-end
+  sig
+    val print : string -> unit;
+  end

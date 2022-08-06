@@ -4,9 +4,7 @@ structure Environment :> ENVIRONMENT =
 
     exception UnknownVariable of string
 
-    fun makeInner () =
-      StringTable.mkTable
-        (256, Fail "Unknown variable.")
+    fun makeInner () = StringTable.mkTable (256, Fail "Unknown variable.")
     fun make globals =
       let val environment = makeInner () in
         app (StringTable.insert environment) globals; [environment]

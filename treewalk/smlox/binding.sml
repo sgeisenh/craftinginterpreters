@@ -27,9 +27,7 @@ structure Binding :> BINDING =
 
     fun define context ident = StringTable.insert (peek context) (ident, true)
 
-    fun makeInner () =
-      StringTable.mkTable
-        (256, Fail "Unknown variable.")
+    fun makeInner () = StringTable.mkTable (256, Fail "Unknown variable.")
 
     fun make globals =
       let val context = makeInner () in

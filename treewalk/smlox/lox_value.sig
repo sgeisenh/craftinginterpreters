@@ -7,8 +7,7 @@ signature LOX_VALUE =
     | String of string
     | Function of t list -> t
     | Class of string * t StringTable.hash_table
-    | Instance of
-                 (string * t StringTable.hash_table) * t StringTable.hash_table
+    | Instance of (string * t StringTable.hash_table) * t StringTable.hash_table
 
     val create_instance : (string * t StringTable.hash_table) -> t
 

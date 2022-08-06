@@ -7,17 +7,14 @@ structure LoxValue :> LOX_VALUE =
     | String of string
     | Function of t list -> t
     | Class of string * t StringTable.hash_table
-    | Instance of
-                 (string * t StringTable.hash_table) * t
-                 StringTable.hash_table
+    | Instance of (string * t StringTable.hash_table) * t StringTable.hash_table
 
     exception RuntimeError of string
 
     fun create_instance cls =
       let
         val fields =
-          StringTable.mkTable
-            (256, RuntimeError "Undefined property")
+          StringTable.mkTable (256, RuntimeError "Undefined property")
       in
         Instance (cls, fields)
       end
@@ -92,11 +89,12 @@ structure LoxValue :> LOX_VALUE =
       | Boolean false => "false"
       | Number r =>
           (let
-            val fl = floor r
-            val frac = r - real fl
-          in if Real.==(frac, 0.0) then
-        Int.toString fl else Real.toString r
-          end handle Overflow => Real.toString r)
+             val fl = floor r
+             val frac = r - real fl
+           in
+             if Real.== (frac, 0.0) then Int.toString fl else Real.toString r
+           end
+             handle Overflow => Real.toString r)
       | String s => s
       | Function function => "<function>"
       | Class (name, ctx) => name

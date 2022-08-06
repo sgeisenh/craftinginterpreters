@@ -1,8 +1,10 @@
 open Common
 
-structure SmLox = SmLox (struct
-  val print = print
-end)
+structure SmLox =
+  SmLox
+    (struct
+       val print = print
+     end)
 
 fun runFile filename =
   let val program = TextIO.inputAll (TextIO.openIn filename) in
