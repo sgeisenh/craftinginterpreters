@@ -73,7 +73,10 @@ structure Interpreter =
                 left
             end
         | Get (obj, ident) =>
-            let val obj = evaluateExpr environment obj in
+            let val obj = evaluateExpr environment obj 
+            (* TODO: This is a pessimization for simple value lookups *)
+            val () = Environment.declare environment ("this", obj)
+            in
               LoxValue.get obj ident
             end
         | Set (obj, ident, value) =>
@@ -83,6 +86,10 @@ structure Interpreter =
             in
               (LoxValue.set obj ident value; value)
             end
+        | This binding =>
+            (case binding of
+               NONE => Environment.get environment "this"
+             | SOME level => Environment.getFrom environment "this" level)
       end
 
     fun evaluateStatement environment print ogStatement =
@@ -92,27 +99,28 @@ structure Interpreter =
             List.app
               (evaluateStatement (Environment.makeNested environment) print)
               statements
-        | Class (name, _) =>
-            Environment.declare environment
-              ( name
-              , LoxValue.Class (name, StringTable.mkTable (256, Fail "Wat"))
-              )
-        | Expression expr => (evaluateExpr environment expr; ())
-        | Function (name, parameters, body) =>
+        | Class (name, methods) =>
             let
-              fun function arguments =
-                if List.length arguments <> List.length parameters then
-                  raise Fail "arity"
-                else
-                  let val newEnvironment = Environment.makeNested environment in
-                    ( List.app (Environment.declare newEnvironment)
-                        (ListPair.zip (parameters, arguments))
-                    ; List.app (evaluateStatement newEnvironment print) body
-                    ; LoxValue.Nil
-                    )
-                  end
+              val methodTable = StringTable.mkTable (256, Fail "Unknown method")
+              fun createMethod method =
+                let val {value, ...} = method in
+                  case value of
+                    Function function_info =>
+                      createFunction environment function_info
+                  | _ => raise Fail "Non-method class contents?"
+                end
+              val () =
+                app ((StringTable.insert methodTable) o createMethod) methods
             in
-              Environment.declare environment (name, LoxValue.Function function)
+              Environment.declare environment
+                (name, LoxValue.Class (name, methodTable))
+            end
+        | Expression expr => (evaluateExpr environment expr; ())
+        | Function function_info =>
+            let
+              val (name, function) = createFunction environment function_info
+            in
+              Environment.declare environment (name, function)
             end
         | If (condition, thenBranch, elseBranch) =>
             let val conditionResult = evaluateExpr environment condition in
@@ -142,6 +150,22 @@ structure Interpreter =
             let val result = evaluateExpr environment expr in
               Environment.declare environment (ident, result)
             end
+      end
+    and createFunction environment (name, parameters, body, kind) =
+      let
+        fun function arguments =
+          if List.length arguments <> List.length parameters then
+            raise Fail "arity"
+          else
+            let val newEnvironment = Environment.makeNested environment in
+              ( List.app (Environment.declare newEnvironment)
+                  (ListPair.zip (parameters, arguments))
+              ; List.app (evaluateStatement newEnvironment print) body
+              ; LoxValue.Nil
+              )
+            end
+      in
+        (name, LoxValue.Function function)
       end
 
     fun interpret environment print =

@@ -15,6 +15,7 @@ signature PARSER =
     | LessEqual
     datatype logical_operator = And | Or
     datatype unary_operator = Negative | Bang
+    datatype function_type = Func | Method
     datatype expr =
       Assign of ((string * int option) * expr Common.annotated)
     | Binary of
@@ -22,6 +23,7 @@ signature PARSER =
     | Call of (expr Common.annotated * (expr Common.annotated) list)
     | Get of (expr Common.annotated * string)
     | Set of (expr Common.annotated * string * expr Common.annotated)
+    | This of int option
     | Grouping of expr Common.annotated
     | Literal of literal
     | Logical of
@@ -32,7 +34,8 @@ signature PARSER =
       Block of (statement Common.annotated) list
     | Class of (string * statement Common.annotated list)
     | Expression of expr Common.annotated
-    | Function of (string * string list * (statement Common.annotated) list)
+    | Function of
+                 (string * string list * (statement Common.annotated) list * function_type)
     | If of
            (expr Common.annotated * statement Common.annotated * (statement Common.annotated) option)
     | While of (expr Common.annotated * statement Common.annotated)

@@ -1,4 +1,4 @@
-structure Binding :> BINDING =
+structure Resolver :> RESOLVER =
   struct
     open Parser
     val nonsenseValue = LoxValue.Nil
@@ -55,10 +55,13 @@ structure Binding :> BINDING =
         val statement =
           case statement of
             Class (name, methods) =>
-              ( declare context name
-              ; define context name
-              ; Class (name, attachBindings' context methods)
-              )
+              let
+                val () = (declare context name; define context name)
+                val context = makeNested context
+                val () = (declare context "this"; define context "this")
+              in
+                Class (name, attachBindings' context methods)
+              end
           | Block statements =>
               let
                 val context = makeNested context
@@ -70,7 +73,7 @@ structure Binding :> BINDING =
               let val expr = attachBindingToExpr context expr in
                 Expression expr
               end
-          | Function (ident, params, body) =>
+          | Function (ident, params, body, kind) =>
               let
                 val () = declare context ident
                 val () = define context ident
@@ -81,7 +84,7 @@ structure Binding :> BINDING =
                     params
                 val body = attachBindings' context body
               in
-                Function (ident, params, body)
+                Function (ident, params, body, kind)
               end
           | If (cond, thn, els) =>
               let
@@ -169,6 +172,10 @@ structure Binding :> BINDING =
                 val value = attachBindingToExpr context value
               in
                 Set (expr, ident, value)
+              end
+          | This _ =>
+              let val binding = getJumps context "this" in
+                This (SOME binding)
               end
       in
         {value = expr, location = location}

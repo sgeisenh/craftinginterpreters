@@ -19,6 +19,7 @@ structure Parser :> PARSER =
     | LessEqual
     datatype logical_operator = And | Or
     datatype unary_operator = Negative | Bang
+    datatype function_type = Func | Method
     datatype expr =
       Assign of ((string * int option) * expr annotated)
     | Binary of (binary_operator * expr annotated * expr annotated)
@@ -28,18 +29,23 @@ structure Parser :> PARSER =
     | Literal of literal
     | Logical of (logical_operator * expr annotated * expr annotated)
     | Set of (expr annotated * string * expr annotated)
+    | This of int option
     | Unary of (unary_operator * expr annotated)
     | Variable of string * int option
     datatype statement =
       Block of statement annotated list
     | Class of string * statement annotated list
     | Expression of expr annotated
-    | Function of (string * string list * statement annotated list)
+    | Function of
+                 (string * string list * statement annotated list * function_type)
     | If of (expr annotated * statement annotated * statement annotated option)
     | While of (expr annotated * statement annotated)
     | Print of expr annotated
     | Return of expr annotated
     | Var of (string * expr annotated)
+
+    fun kindToString Func = "function"
+      | kindToString Method = "method"
 
     fun matchTypes types tokens =
       case tokens of
@@ -124,7 +130,7 @@ structure Parser :> PARSER =
       case tokens of
         {value = Scanner.Class, ...} :: _ => parseClassDeclaration tokens
       | {value = Scanner.Fun, location = startLocation} :: tokens =>
-          parseFunction ("function", tokens) startLocation
+          parseFunction (Func, tokens) startLocation
       | {value = Scanner.Var, ...} :: _ => parseVarDeclaration tokens
       | _ => parseStatement tokens
     and parseStatements tokens = parseStatements' (tokens, [])
@@ -157,7 +163,7 @@ structure Parser :> PARSER =
               | {location = startLocation, ...} :: _ =>
                   let
                     val (function, tokens) =
-                      parseFunction ("method", tokens) startLocation
+                      parseFunction (Method, tokens) startLocation
                   in
                     parseMethods tokens (function :: acc)
                   end
@@ -190,16 +196,22 @@ structure Parser :> PARSER =
                           ) =>
                             (body, tokens, blockLocation)
                         | _ => raise Fail "Unreachable.")
-                   | _ => raise Fail ("Expect '{' before " ^ kind ^ " body.")
+                   | _ =>
+                       raise
+                         Fail
+                           ("Expect '{' before "
+                            ^ kindToString kind
+                            ^ " body.")
                in
-                 ( { value = Function (name, parameters, body)
+                 ( { value = Function (name, parameters, body, kind)
                    , location = merge_locations [startLocation, blockLocation]
                    }
                  , tokens
                  )
                end
-           | _ => raise Fail ("Expect '(' after " ^ kind ^ " name."))
-      | _ => raise Fail ("Expect " ^ kind ^ " name.")
+           | _ =>
+               raise Fail ("Expect '(' after " ^ kindToString kind ^ " name."))
+      | _ => raise Fail ("Expect " ^ kindToString kind ^ " name.")
     and parseParameters tokens = parseParameters' tokens []
     and parseParameters' tokens acc =
       case tokens of
@@ -558,12 +570,14 @@ structure Parser :> PARSER =
                 {value = Scanner.Identifier ident, location = identLocation} :: tokens =>
                   (ident, tokens, identLocation)
               | _ => raise Fail "Expect property name after '.'."
+            val (callee, tokens) =
+              ( { value = Get (callee, name)
+                , location = merge_locations [location, identLocation]
+                }
+              , tokens
+              )
           in
-            ( { value = Get (callee, name)
-              , location = merge_locations [location, identLocation]
-              }
-            , tokens
-            )
+            parseCalls (callee, tokens)
           end
       | _ => (callee, tokens)
     and finishCall (callee, tokens) = finishCall' (callee, tokens) []
@@ -621,6 +635,8 @@ structure Parser :> PARSER =
                     , tokens
                     )
               end
+          | {value = Scanner.This, location} =>
+              ({value = This NONE, location = location}, tokens)
           | {value = Scanner.Identifier ident, location} =>
               ({value = Variable (ident, NONE), location = location}, tokens)
           | _ =>

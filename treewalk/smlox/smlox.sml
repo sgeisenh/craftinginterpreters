@@ -16,12 +16,12 @@ functor SmLox (R : RUNTIME) =
       let
         val scanner = Scanner.make program
         val tokensOrErrors = Scanner.scanTokens scanner
-        val astOrErrors = bind Parser.parse tokensOrErrors
+        val astOrErrors = fmap Parser.parse tokensOrErrors
         val boundGlobalNames = map (fn (name, _) => name) globals
         val boundAstOrErrors =
-          bind (Binding.attachBindings boundGlobalNames) astOrErrors
+          fmap (Resolver.attachBindings boundGlobalNames) astOrErrors
         val successOrFailure =
-          bind
+          fmap
             (fn ast => Success (Interpreter.interpret environment R.print ast))
             boundAstOrErrors
       in

@@ -22,8 +22,8 @@ scanner.sig
 scanner.sml
 parser.sig
 parser.sml
-binding.sig
-binding.sml
+resolver.sig
+resolver.sml
 interpreter.sig
 interpreter.sml
 smlox.sml

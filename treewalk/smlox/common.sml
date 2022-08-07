@@ -2,7 +2,7 @@ structure Common :> COMMON =
   struct
     datatype ('a, 'b) result = Success of 'a | Failure of 'b
 
-    fun bind f r =
+    fun fmap f r =
       case r of
         Success x => f x
       | Failure failure => Failure failure

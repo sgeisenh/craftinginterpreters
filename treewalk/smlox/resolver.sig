@@ -1,4 +1,4 @@
-signature BINDING =
+signature RESOLVER =
   sig
     val attachBindings : string list
                            -> Parser.statement Common.annotated list

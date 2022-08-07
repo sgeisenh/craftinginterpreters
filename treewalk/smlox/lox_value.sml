@@ -70,7 +70,13 @@ structure LoxValue :> LOX_VALUE =
 
     fun get obj property =
       case obj of
-        Instance (cls, fields) => StringTable.lookup fields property
+        Instance ((_, methods), fields) =>
+          if StringTable.inDomain fields property then
+            StringTable.lookup fields property
+          else if StringTable.inDomain methods property then
+            StringTable.lookup methods property
+          else
+            raise RuntimeError ("Undefined property '" ^ property ^ "'.")
       | _ => raise RuntimeError "Only instances have properties"
 
     fun set obj ident value =

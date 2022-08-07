@@ -1,7 +1,7 @@
 signature COMMON =
   sig
     datatype ('a, 'b) result = Success of 'a | Failure of 'b
-    val bind : ('a -> ('b, 'c) result) -> ('a, 'c) result -> ('b, 'c) result
+    val fmap : ('a -> ('b, 'c) result) -> ('a, 'c) result -> ('b, 'c) result
 
     type source_position = {line : int, offset : int}
     type source_range = {start : source_position, finish : source_position}
