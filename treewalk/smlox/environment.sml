@@ -11,6 +11,7 @@ structure Environment :> ENVIRONMENT =
       end
     fun makeNested context = makeInner () :: context
     fun declare context value = StringTable.insert (hd context) value
+    fun remove context value = ignore(StringTable.remove (hd context) value)
     fun get [] ident = raise UnknownVariable ident
       | get (curr :: rest) ident =
         case StringTable.find curr ident of

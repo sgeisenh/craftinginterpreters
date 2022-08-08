@@ -74,10 +74,10 @@ structure Interpreter =
             end
         | Get (obj, ident) =>
             let val obj = evaluateExpr environment obj 
-            (* TODO: This is a pessimization for simple value lookups *)
+            (* TODO: This doesn't quite work *)
             val () = Environment.declare environment ("this", obj)
             in
-              LoxValue.get obj ident
+              LoxValue.get obj ident 
             end
         | Set (obj, ident, value) =>
             let
