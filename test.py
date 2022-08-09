@@ -41,6 +41,7 @@ async def run_file(interpreter_path: str, example_path: str, sem: asyncio.Semaph
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), 30)
         except asyncio.TimeoutError:
+            proc.terminate()
             print(f"Example timed out: {example_path}")
             return ExampleResult(example_path, timeout=True)
 

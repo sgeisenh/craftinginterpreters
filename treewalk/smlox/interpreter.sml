@@ -73,11 +73,12 @@ structure Interpreter =
                 left
             end
         | Get (obj, ident) =>
-            let val obj = evaluateExpr environment obj 
-            (* TODO: This doesn't quite work *)
-            val () = Environment.declare environment ("this", obj)
+            let
+              val obj = evaluateExpr environment obj
+              (* TODO: This doesn't quite work *)
+              val () = Environment.declare environment ("this", obj)
             in
-              LoxValue.get obj ident 
+              LoxValue.get obj ident
             end
         | Set (obj, ident, value) =>
             let
@@ -106,7 +107,18 @@ structure Interpreter =
                 let val {value, ...} = method in
                   case value of
                     Function function_info =>
-                      createFunction environment function_info
+                      let
+                        val environment = Environment.makeNested environment
+                        val (name, function) =
+                          createFunction environment function_info
+                      in
+                        ( name
+                        , fn this =>
+                            ( Environment.declare environment ("this", this)
+                            ; function
+                            )
+                        )
+                      end
                   | _ => raise Fail "Non-method class contents?"
                 end
               val () =
@@ -165,7 +177,7 @@ structure Interpreter =
               )
             end
       in
-        (name, LoxValue.Function function)
+        (name, LoxValue.Function (name, function))
       end
 
     fun interpret environment print =

@@ -5,11 +5,10 @@ signature LOX_VALUE =
     | Boolean of bool
     | Number of real
     | String of string
-    | Function of t list -> t
-    | Class of string * t StringTable.hash_table
-    | Instance of (string * t StringTable.hash_table) * t StringTable.hash_table
-
-    val create_instance : (string * t StringTable.hash_table) -> t
+    | Function of string * (t list -> t)
+    | Class of string * (t -> t) StringTable.hash_table
+    | Instance of
+                 (string * (t -> t) StringTable.hash_table) * t StringTable.hash_table
 
     exception RuntimeError of string
 

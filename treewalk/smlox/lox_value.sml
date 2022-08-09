@@ -5,9 +5,10 @@ structure LoxValue :> LOX_VALUE =
     | Boolean of bool
     | Number of real
     | String of string
-    | Function of t list -> t
-    | Class of string * t StringTable.hash_table
-    | Instance of (string * t StringTable.hash_table) * t StringTable.hash_table
+    | Function of string * (t list -> t)
+    | Class of string * (t -> t) StringTable.hash_table
+    | Instance of
+                 (string * (t -> t) StringTable.hash_table) * t StringTable.hash_table
 
     exception RuntimeError of string
 
@@ -60,23 +61,37 @@ structure LoxValue :> LOX_VALUE =
       | negate _ = raise RuntimeError "Operand to unary - must be a number"
 
     fun logicalNot (Boolean operand) = Boolean (not operand)
-      | logicalNot _ = raise RuntimeError "Operand to unary ! must be a boolean"
+      | logicalNot Nil = Boolean true
+      | logicalNot _ = Boolean false
 
     fun call (callee, arguments) =
       case callee of
-        Function function => function arguments
-      | Class cls => create_instance cls
+        Function (_, function) => function arguments
+      | Class (name, methods) =>
+          let val instance = create_instance (name, methods) in
+            case StringTable.find methods "init" of
+              NONE =>
+                (case arguments of
+                   [] => instance
+                 | _ =>
+                     raise
+                       RuntimeError "Calling default constructor with arguments")
+            | SOME constructor =>
+                (call (constructor instance, arguments); instance)
+          end
       | _ => raise RuntimeError "can only call functions."
 
     fun get obj property =
       case obj of
         Instance ((_, methods), fields) =>
-          if StringTable.inDomain fields property then
-            StringTable.lookup fields property
-          else if StringTable.inDomain methods property then
-            StringTable.lookup methods property
-          else
-            raise RuntimeError ("Undefined property '" ^ property ^ "'.")
+          (case StringTable.find fields property of
+             SOME prop => prop
+           | NONE =>
+               (case StringTable.find methods property of
+                  SOME meth => meth obj
+                | NONE =>
+                    raise
+                      RuntimeError ("Undefined property '" ^ property ^ "'.")))
       | _ => raise RuntimeError "Only instances have properties"
 
     fun set obj ident value =
@@ -102,7 +117,7 @@ structure LoxValue :> LOX_VALUE =
            end
              handle Overflow => Real.toString r)
       | String s => s
-      | Function function => "<function>"
-      | Class (name, ctx) => name
-      | Instance ((cls, ctx), _) => cls ^ " instance"
+      | Function (name, _) => "<fn " ^ name ^ ">"
+      | Class (name, _) => name
+      | Instance ((cls, _), _) => cls ^ " instance"
   end

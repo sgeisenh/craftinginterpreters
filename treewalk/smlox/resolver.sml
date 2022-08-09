@@ -1,7 +1,9 @@
 structure Resolver :> RESOLVER =
   struct
     open Parser
-    val nonsenseValue = LoxValue.Nil
+
+    datatype function_kind = NoFunction | FunctionKind | MethodKind
+    datatype class_type = NoClass | ClassType
 
     val peek = hd
 
@@ -48,8 +50,9 @@ structure Resolver :> RESOLVER =
         | NONE => getJumps' rest ident (level + 1)
     fun getJumps context ident = getJumps' context ident 0
 
-    fun attachBindings' context = map (attachBinding context)
-    and attachBinding context (statement : statement Common.annotated) =
+    fun attachBindings' context currentFunction currentClass =
+      map (attachBinding context currentFunction currentClass)
+    and attachBinding context currentFunction currentClass statement =
       let
         val {value = statement, location} = statement
         val statement =
@@ -59,18 +62,22 @@ structure Resolver :> RESOLVER =
                 val () = (declare context name; define context name)
                 val context = makeNested context
                 val () = (declare context "this"; define context "this")
+                val methods =
+                  attachBindings' context NoFunction ClassType methods
               in
-                Class (name, attachBindings' context methods)
+                Class (name, methods)
               end
           | Block statements =>
               let
                 val context = makeNested context
-                val statements = attachBindings' context statements
+                val statements =
+                  attachBindings' context currentFunction currentClass
+                    statements
               in
                 Block statements
               end
           | Expression expr =>
-              let val expr = attachBindingToExpr context expr in
+              let val expr = attachBindingToExpr context currentClass expr in
                 Expression expr
               end
           | Function (ident, params, body, kind) =>
@@ -82,36 +89,53 @@ structure Resolver :> RESOLVER =
                   List.app
                     (fn param => (declare context param; define context param))
                     params
-                val body = attachBindings' context body
+                val currentFunction =
+                  case kind of
+                    Func => FunctionKind
+                  | Method => MethodKind
+                val body =
+                  attachBindings' context currentFunction currentClass body
               in
                 Function (ident, params, body, kind)
               end
           | If (cond, thn, els) =>
               let
-                val cond = attachBindingToExpr context cond
-                val thn = attachBinding context thn
+                val cond = attachBindingToExpr context currentClass cond
+                val thn = attachBinding context currentFunction currentClass thn
                 val els =
                   case els of
                     NONE => els
-                  | SOME els => SOME (attachBinding context els)
+                  | SOME els =>
+                      SOME
+                        (attachBinding context currentFunction currentClass els)
               in
                 If (cond, thn, els)
               end
           | While (cond, body) =>
               let
-                val cond = attachBindingToExpr context cond
-                val body = attachBinding context body
+                val cond = attachBindingToExpr context currentClass cond
+                val body =
+                  attachBinding context currentFunction currentClass body
               in
                 While (cond, body)
               end
           | Print expr =>
-              let val expr = attachBindingToExpr context expr in Print expr end
+              let val expr = attachBindingToExpr context currentClass expr in
+                Print expr
+              end
           | Return expr =>
-              let val expr = attachBindingToExpr context expr in Return expr end
+              (case currentFunction of
+                 NoFunction => raise Fail "Can't return outside of a function"
+               | _ =>
+                   let
+                     val expr = attachBindingToExpr context currentClass expr
+                   in
+                     Return expr
+                   end)
           | Var (ident, expr) =>
               let
                 val () = declare context ident
-                val expr = attachBindingToExpr context expr
+                val expr = attachBindingToExpr context currentClass expr
                 val () = define context ident
               in
                 Var (ident, expr)
@@ -119,70 +143,69 @@ structure Resolver :> RESOLVER =
       in
         {value = statement, location = location}
       end
-    and attachBindingToExpr context expr =
+    and attachBindingToExpr context currentClass expr =
       let
         val {value = expr, location} = expr
+        val recurse = attachBindingToExpr context currentClass
         val expr =
           case expr of
             Assign ((ident, _), expr) =>
               let
-                val expr = attachBindingToExpr context expr
+                val expr = recurse expr
                 val binding = getJumps context ident
               in
                 Assign ((ident, SOME binding), expr)
               end
           | Binary (operator, left, right) =>
               let
-                val left = attachBindingToExpr context left
-                val right = attachBindingToExpr context right
+                val left = recurse left
+                val right = recurse right
               in
                 Binary (operator, left, right)
               end
           | Call (callee, args) =>
               let
-                val callee = attachBindingToExpr context callee
-                val args = map (attachBindingToExpr context) args
+                val callee = recurse callee
+                val args = map recurse args
               in
                 Call (callee, args)
               end
-          | Grouping expr =>
-              let val expr = attachBindingToExpr context expr in
-                Grouping expr
-              end
+          | Grouping expr => let val expr = recurse expr in Grouping expr end
           | Literal lit => expr
           | Logical (operator, left, right) =>
               let
-                val left = attachBindingToExpr context left
-                val right = attachBindingToExpr context right
+                val left = recurse left
+                val right = recurse right
               in
                 Logical (operator, left, right)
               end
           | Unary (operator, operand) =>
-              let val operand = attachBindingToExpr context operand in
-                Unary (operator, operand)
-              end
+              let val operand = recurse operand in Unary (operator, operand) end
           | Variable (ident, _) =>
               let val binding = getJumps context ident in
                 Variable (ident, SOME binding)
               end
-          | Get (expr, name) => Get (attachBindingToExpr context expr, name)
+          | Get (expr, name) => Get (recurse expr, name)
           | Set (expr, ident, value) =>
               let
-                val expr = attachBindingToExpr context expr
-                val value = attachBindingToExpr context value
+                val expr = recurse expr
+                val value = recurse value
               in
                 Set (expr, ident, value)
               end
           | This _ =>
-              let val binding = getJumps context "this" in
-                This (SOME binding)
-              end
+              case currentClass of
+                NoClass => raise Fail "Can't use 'this' outside of a class."
+              | _ =>
+                  let val binding = getJumps context "this" in
+                    This (SOME binding)
+                  end
       in
         {value = expr, location = location}
       end
 
     fun attachBindings initialEnvironment statements =
       let val context = make initialEnvironment in
-        Common.Success (attachBindings' context statements)
+        Common.Success (attachBindings' context NoFunction NoClass statements)
       end
   end
