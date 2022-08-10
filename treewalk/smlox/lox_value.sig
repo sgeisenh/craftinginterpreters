@@ -6,11 +6,14 @@ signature LOX_VALUE =
     | Number of real
     | String of string
     | Function of string * (t list -> t)
-    | Class of string * (t -> t) StringTable.hash_table
-    | Instance of
-                 (string * (t -> t) StringTable.hash_table) * t StringTable.hash_table
+    | Class of class
+    | Instance of class * t StringTable.hash_table
+    and class =
+    ClassType of string * (t -> t) StringTable.hash_table * class option
 
     exception RuntimeError of string
+
+    val findMethod : class -> string -> (t -> t) option
 
     val eq : (t * t) -> t
     val neq : (t * t) -> t

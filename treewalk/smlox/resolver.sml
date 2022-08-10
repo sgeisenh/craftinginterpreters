@@ -2,7 +2,7 @@ structure Resolver :> RESOLVER =
   struct
     open Parser
 
-    datatype function_kind = NoFunction | FunctionKind | MethodKind
+    datatype function_kind = NoFunction | FunctionKind | MethodKind | InitKind
     datatype class_type = NoClass | ClassType
 
     val peek = hd
@@ -57,15 +57,36 @@ structure Resolver :> RESOLVER =
         val {value = statement, location} = statement
         val statement =
           case statement of
-            Class (name, methods) =>
+            Class (name, superclass, methods) =>
               let
                 val () = (declare context name; define context name)
+                val superclass =
+                  case superclass of
+                    NONE => NONE
+                  | SOME superclass =>
+                      let
+                        val () =
+                          case superclass of
+                            {value = Variable (superclass, _), ...} =>
+                              if superclass = name then
+                                raise Fail "A class can't inherit from itself."
+                              else
+                                ()
+                          | _ => raise Fail "Unreachable"
+                      in
+                        SOME
+                          (attachBindingToExpr context currentClass superclass)
+                      end
                 val context = makeNested context
+                val () =
+                  case superclass of
+                    NONE => ()
+                  | SOME _ => (declare context "super"; define context "super")
                 val () = (declare context "this"; define context "this")
                 val methods =
                   attachBindings' context NoFunction ClassType methods
               in
-                Class (name, methods)
+                Class (name, superclass, methods)
               end
           | Block statements =>
               let
@@ -92,7 +113,7 @@ structure Resolver :> RESOLVER =
                 val currentFunction =
                   case kind of
                     Func => FunctionKind
-                  | Method => MethodKind
+                  | Method => if ident = "init" then InitKind else MethodKind
                 val body =
                   attachBindings' context currentFunction currentClass body
               in
@@ -126,9 +147,17 @@ structure Resolver :> RESOLVER =
           | Return expr =>
               (case currentFunction of
                  NoFunction => raise Fail "Can't return outside of a function"
+               | InitKind =>
+                   (case expr of
+                      NONE => Return expr
+                    | _ => raise Fail "Can't return a value from an initializer")
                | _ =>
                    let
-                     val expr = attachBindingToExpr context currentClass expr
+                     val expr =
+                       case expr of
+                         NONE => NONE
+                       | SOME expr =>
+                           SOME (attachBindingToExpr context currentClass expr)
                    in
                      Return expr
                    end)
@@ -193,6 +222,7 @@ structure Resolver :> RESOLVER =
               in
                 Set (expr, ident, value)
               end
+          | Super method => (getJumps context "super"; Super method)
           | This _ =>
               case currentClass of
                 NoClass => raise Fail "Can't use 'this' outside of a class."

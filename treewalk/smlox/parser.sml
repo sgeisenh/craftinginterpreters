@@ -29,19 +29,20 @@ structure Parser :> PARSER =
     | Literal of literal
     | Logical of (logical_operator * expr annotated * expr annotated)
     | Set of (expr annotated * string * expr annotated)
+    | Super of string
     | This of int option
     | Unary of (unary_operator * expr annotated)
     | Variable of string * int option
     datatype statement =
       Block of statement annotated list
-    | Class of string * statement annotated list
+    | Class of string * expr annotated option * statement annotated list
     | Expression of expr annotated
     | Function of
                  (string * string list * statement annotated list * function_type)
     | If of (expr annotated * statement annotated * statement annotated option)
     | While of (expr annotated * statement annotated)
     | Print of expr annotated
-    | Return of expr annotated
+    | Return of expr annotated option
     | Var of (string * expr annotated)
 
     fun kindToString Func = "function"
@@ -153,10 +154,24 @@ structure Parser :> PARSER =
       | _ => parseExpressionStatement tokens
     and parseClassDeclaration tokens =
       case tokens of
-        {location = kwLocation, ...} :: {value = Scanner.Identifier name, ...} :: { value = Scanner.LeftBrace
-                                                                                  , ...
-                                                                                  } :: tokens =>
+        {location = kwLocation, ...} :: {value = Scanner.Identifier name, ...} :: tokens =>
           let
+            val (superclass, tokens) =
+              case tokens of
+                {value = Scanner.Less, ...} :: { value = Scanner.Identifier superclass
+                                               , location = superclassLocation
+                                               } :: tokens =>
+                  ( SOME
+                      ({ value = Variable (superclass, NONE)
+                       , location = superclassLocation
+                       })
+                  , tokens
+                  )
+              | _ => (NONE, tokens)
+            val tokens =
+              case tokens of
+                {value = Scanner.LeftBrace, ...} :: tokens => tokens
+              | _ => raise Fail "Expect '{' before class body."
             fun parseMethods tokens acc =
               case tokens of
                 {value = Scanner.RightBrace, ...} :: _ => (List.rev acc, tokens)
@@ -172,7 +187,7 @@ structure Parser :> PARSER =
           in
             case tokens of
               {value = Scanner.RightBrace, location = rBraceLocation} :: tokens =>
-                ( { value = Class (name, methods)
+                ( { value = Class (name, superclass, methods)
                   , location = merge_locations [kwLocation, rBraceLocation]
                   }
                 , tokens
@@ -388,7 +403,7 @@ structure Parser :> PARSER =
         {location = kwLocation, ...} :: { value = Scanner.Semicolon
                                         , location = semiLocation
                                         } :: tokens =>
-          ( { value = Return ({location = Unknown, value = Literal Nil})
+          ( { value = Return NONE
             , location = merge_locations [kwLocation, semiLocation]
             }
           , tokens
@@ -397,7 +412,7 @@ structure Parser :> PARSER =
           let val (expression, tokens) = parseExpression tokens in
             case tokens of
               {value = Scanner.Semicolon, location = semiLocation} :: tokens =>
-                ( { value = Return expression
+                ( { value = Return (SOME expression)
                   , location = merge_locations [kwLocation, semiLocation]
                   }
                 , tokens
@@ -634,6 +649,20 @@ structure Parser :> PARSER =
                       }
                     , tokens
                     )
+              end
+          | {value = Scanner.Super, location} =>
+              let
+                val tokens =
+                  case tokens of
+                    {value = Scanner.Dot, ...} :: tokens => tokens
+                  | _ => raise Fail "Expect '.' after 'super'."
+                val (method, tokens) =
+                  case tokens of
+                    {value = Scanner.Identifier ident, ...} :: tokens =>
+                      (ident, tokens)
+                  | _ => raise Fail "Expect superclass method name."
+              in
+                ({value = Super method, location = location}, tokens)
               end
           | {value = Scanner.This, location} =>
               ({value = This NONE, location = location}, tokens)

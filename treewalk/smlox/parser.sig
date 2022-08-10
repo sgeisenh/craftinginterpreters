@@ -23,6 +23,7 @@ signature PARSER =
     | Call of (expr Common.annotated * (expr Common.annotated) list)
     | Get of (expr Common.annotated * string)
     | Set of (expr Common.annotated * string * expr Common.annotated)
+    | Super of string
     | This of int option
     | Grouping of expr Common.annotated
     | Literal of literal
@@ -32,7 +33,8 @@ signature PARSER =
     | Variable of string * int option
     datatype statement =
       Block of (statement Common.annotated) list
-    | Class of (string * statement Common.annotated list)
+    | Class of
+              (string * expr Common.annotated option * statement Common.annotated list)
     | Expression of expr Common.annotated
     | Function of
                  (string * string list * (statement Common.annotated) list * function_type)
@@ -40,7 +42,7 @@ signature PARSER =
            (expr Common.annotated * statement Common.annotated * (statement Common.annotated) option)
     | While of (expr Common.annotated * statement Common.annotated)
     | Print of expr Common.annotated
-    | Return of expr Common.annotated
+    | Return of expr Common.annotated option
     | Var of (string * expr Common.annotated)
 
     val parse : (Scanner.token Common.annotated) list -> ( (statement Common.annotated) list

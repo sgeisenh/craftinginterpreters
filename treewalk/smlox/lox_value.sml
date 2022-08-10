@@ -6,19 +6,28 @@ structure LoxValue :> LOX_VALUE =
     | Number of real
     | String of string
     | Function of string * (t list -> t)
-    | Class of string * (t -> t) StringTable.hash_table
-    | Instance of
-                 (string * (t -> t) StringTable.hash_table) * t StringTable.hash_table
+    | Class of class
+    | Instance of class * t StringTable.hash_table
+    and class =
+    ClassType of string * (t -> t) StringTable.hash_table * class option
 
     exception RuntimeError of string
 
-    fun create_instance cls =
+    fun createInstance cls =
       let
         val fields =
           StringTable.mkTable (256, RuntimeError "Undefined property")
       in
         Instance (cls, fields)
       end
+
+    fun findMethod (ClassType (_, methods, superclass)) name =
+      case StringTable.find methods name of
+        SOME method => SOME method
+      | NONE =>
+          (case superclass of
+             SOME superclass => findMethod superclass name
+           | NONE => NONE)
 
     fun eq (Nil, Nil) = Boolean (true)
       | eq (Boolean left, Boolean right) = Boolean (left = right)
@@ -60,16 +69,18 @@ structure LoxValue :> LOX_VALUE =
     fun negate (Number operand) = Number (~ operand)
       | negate _ = raise RuntimeError "Operand to unary - must be a number"
 
-    fun logicalNot (Boolean operand) = Boolean (not operand)
-      | logicalNot Nil = Boolean true
-      | logicalNot _ = Boolean false
+    fun isTruthy (Boolean false) = false
+      | isTruthy Nil = false
+      | isTruthy _ = true
+
+    fun logicalNot value = Boolean (not (isTruthy value))
 
     fun call (callee, arguments) =
       case callee of
         Function (_, function) => function arguments
-      | Class (name, methods) =>
-          let val instance = create_instance (name, methods) in
-            case StringTable.find methods "init" of
+      | Class (class) =>
+          let val instance = createInstance class in
+            case findMethod class "init" of
               NONE =>
                 (case arguments of
                    [] => instance
@@ -83,15 +94,13 @@ structure LoxValue :> LOX_VALUE =
 
     fun get obj property =
       case obj of
-        Instance ((_, methods), fields) =>
+        Instance (classinfo, fields) =>
           (case StringTable.find fields property of
              SOME prop => prop
            | NONE =>
-               (case StringTable.find methods property of
-                  SOME meth => meth obj
-                | NONE =>
-                    raise
-                      RuntimeError ("Undefined property '" ^ property ^ "'.")))
+               (case findMethod classinfo property of
+                  SOME method => method obj
+                | NONE => raise RuntimeError "No property."))
       | _ => raise RuntimeError "Only instances have properties"
 
     fun set obj ident value =
@@ -99,25 +108,17 @@ structure LoxValue :> LOX_VALUE =
         Instance (cls, fields) => StringTable.insert fields (ident, value)
       | _ => raise RuntimeError "Only instances have fields"
 
-    fun isTruthy (Boolean false) = false
-      | isTruthy Nil = false
-      | isTruthy _ = true
-
     fun toString value =
       case value of
         Nil => "nil"
       | Boolean true => "true"
       | Boolean false => "false"
       | Number r =>
-          (let
-             val fl = floor r
-             val frac = r - real fl
-           in
-             if Real.== (frac, 0.0) then Int.toString fl else Real.toString r
-           end
-             handle Overflow => Real.toString r)
+          let val result = Real.toString r in
+            String.map (fn #"~" => #"-" | c => c) result
+          end
       | String s => s
-      | Function (name, _) => "<fn " ^ name ^ ">"
-      | Class (name, _) => name
-      | Instance ((cls, _), _) => cls ^ " instance"
+      | Function (name, _) => "<" ^ name ^ ">"
+      | Class (ClassType (name, _, _)) => name
+      | Instance (ClassType (cls, _, _), _) => cls ^ " instance"
   end

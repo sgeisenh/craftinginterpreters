@@ -87,6 +87,20 @@ structure Interpreter =
             in
               (LoxValue.set obj ident value; value)
             end
+        | Super method =>
+            let
+              val superclass =
+                case Environment.get environment "super" of
+                  LoxValue.Class superclass => superclass
+                | _ => raise Fail "Unreachable."
+              val method =
+                case LoxValue.findMethod superclass method of
+                  SOME method => method
+                | NONE => raise Fail ("Undefined property '" ^ method ^ "'.")
+              val this = Environment.get environment "this"
+            in
+              method this
+            end
         | This binding =>
             (case binding of
                NONE => Environment.get environment "this"
@@ -100,15 +114,40 @@ structure Interpreter =
             List.app
               (evaluateStatement (Environment.makeNested environment) print)
               statements
-        | Class (name, methods) =>
+        | Class (name, superclass, methods) =>
             let
+              val superclass =
+                case superclass of
+                  NONE => NONE
+                | SOME superclass =>
+                    let
+                      val superclass =
+                        case evaluateExpr environment superclass of
+                          LoxValue.Class superclass => superclass
+                        | _ => raise Fail "Superclass must be a class."
+                    in
+                      SOME superclass
+                    end
+              val methodEnvironment =
+                case superclass of
+                  NONE => environment
+                | SOME superclass =>
+                    let
+                      val methodEnvironment = Environment.makeNested environment
+                      val () =
+                        Environment.declare methodEnvironment
+                          ("super", LoxValue.Class superclass)
+                    in
+                      methodEnvironment
+                    end
               val methodTable = StringTable.mkTable (256, Fail "Unknown method")
               fun createMethod method =
                 let val {value, ...} = method in
                   case value of
                     Function function_info =>
                       let
-                        val environment = Environment.makeNested environment
+                        val environment =
+                          Environment.makeNested methodEnvironment
                         val (name, function) =
                           createFunction environment function_info
                       in
@@ -125,9 +164,12 @@ structure Interpreter =
                 app ((StringTable.insert methodTable) o createMethod) methods
             in
               Environment.declare environment
-                (name, LoxValue.Class (name, methodTable))
+                ( name
+                , LoxValue.Class
+                    (LoxValue.ClassType (name, methodTable, superclass))
+                )
             end
-        | Expression expr => (evaluateExpr environment expr; ())
+        | Expression expr => ignore (evaluateExpr environment expr)
         | Function function_info =>
             let
               val (name, function) = createFunction environment function_info
@@ -155,7 +197,12 @@ structure Interpreter =
               print (LoxValue.toString result ^ "\n")
             end
         | Return expr =>
-            let val result = evaluateExpr environment expr in
+            let
+              val result =
+                case expr of
+                  NONE => LoxValue.Nil
+                | SOME expr => evaluateExpr environment expr
+            in
               raise ReturnExn result
             end
         | Var (ident, expr) =>
@@ -177,7 +224,7 @@ structure Interpreter =
               )
             end
       in
-        (name, LoxValue.Function (name, function))
+        (name, LoxValue.Function ("fn " ^ name, function))
       end
 
     fun interpret environment print =
