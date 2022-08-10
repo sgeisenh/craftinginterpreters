@@ -28,9 +28,11 @@ async def running_example(example_path: str):
     finally:
         currently_running.remove(example_path)
 
+num_differences = 0
 
 async def run_file(interpreter_path: str, example_path: str, sem: asyncio.Semaphore,
         reference: Optional[str]) -> None:
+    global num_differences
     async with sem, running_example(example_path):
         currently_running.add(example_path)
         proc = await asyncio.create_subprocess_exec(
@@ -53,12 +55,14 @@ async def run_file(interpreter_path: str, example_path: str, sem: asyncio.Semaph
             if proc.returncode == 0 and ref_proc.returncode != 0:
                 # print(f"Return codes differed for example {example_path}: {proc.returncode} vs {ref_proc.returncode}")
                 pass
-            elif stdout.strip() != refout.strip():
+            elif stdout.strip() != refout.strip() and "/benchmark/" not in example_path:
                 print(f"\nExample {example_path}:")
                 print("Impl:")
                 print(stdout)
                 print("Ref:")
                 print(refout)
+                num_differences += 1
+
 
         return ExampleResult(example_path, proc.returncode, stdout, stderr)
 
@@ -93,6 +97,7 @@ async def main(args: Optional[Sequence[str]] = None) -> int:
     sem = asyncio.Semaphore(ns.num_processes)
     tasks = [run_file(ns.interpreter_path, file, sem, ns.reference) for file in find_files(ns.examples_path)]
     await asyncio.gather(*tasks)
+    print(f"Differences in {num_differences} out of {len(tasks)}")
     return 0
 
 

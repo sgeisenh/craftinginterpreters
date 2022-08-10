@@ -2,8 +2,6 @@ structure Interpreter =
   struct
     open Parser
 
-    exception ReturnExn of LoxValue.t
-
     fun evaluateExpr environment expr =
       let val {value = expr, ...} = expr in
         case expr of
@@ -38,7 +36,7 @@ structure Interpreter =
               val callee = evaluateExpr environment callee
               val arguments = map (evaluateExpr environment) arguments
             in
-              LoxValue.call (callee, arguments) handle ReturnExn value => value
+              LoxValue.call (callee, arguments) handle LoxValue.ReturnExn value => value
             end
         | Grouping expr' => evaluateExpr environment expr'
         | Literal literal =>
@@ -203,7 +201,7 @@ structure Interpreter =
                   NONE => LoxValue.Nil
                 | SOME expr => evaluateExpr environment expr
             in
-              raise ReturnExn result
+              raise LoxValue.ReturnExn result
             end
         | Var (ident, expr) =>
             let val result = evaluateExpr environment expr in

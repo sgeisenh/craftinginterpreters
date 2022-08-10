@@ -7,7 +7,7 @@ functor SmLox (R : RUNTIME) =
     val globals =
       [ ( "clock"
         , LoxValue.Function
-            ( "clock"
+            ( "native fn"
             , (fn _ :: _ => raise Fail "clock accepts 0 arguments"
                 | _ =>
                   LoxValue.Number (Time.toReal (Time.now ()) - startTimeSecs))

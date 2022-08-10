@@ -12,6 +12,7 @@ structure LoxValue :> LOX_VALUE =
     ClassType of string * (t -> t) StringTable.hash_table * class option
 
     exception RuntimeError of string
+    exception ReturnExn of t
 
     fun createInstance cls =
       let
@@ -88,7 +89,8 @@ structure LoxValue :> LOX_VALUE =
                      raise
                        RuntimeError "Calling default constructor with arguments")
             | SOME constructor =>
-                (call (constructor instance, arguments); instance)
+                (call (constructor instance, arguments); instance) handle
+                ReturnExn _ => instance
           end
       | _ => raise RuntimeError "can only call functions."
 

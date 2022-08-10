@@ -11,6 +11,7 @@ signature LOX_VALUE =
     and class =
     ClassType of string * (t -> t) StringTable.hash_table * class option
 
+    exception ReturnExn of t
     exception RuntimeError of string
 
     val findMethod : class -> string -> (t -> t) option

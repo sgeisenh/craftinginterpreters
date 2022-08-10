@@ -5,6 +5,8 @@ structure Resolver :> RESOLVER =
     datatype function_kind = NoFunction | FunctionKind | MethodKind | InitKind
     datatype class_type = NoClass | ClassType
 
+    exception UnknownVariable
+
     val peek = hd
 
     fun isGlobal [_] = true
@@ -39,7 +41,7 @@ structure Resolver :> RESOLVER =
 
     fun makeNested context = makeInner () :: context
 
-    fun getJumps' [] ident level = raise Fail "Unknown variable."
+    fun getJumps' [] ident level = raise UnknownVariable
       | getJumps' (curr :: rest) ident level =
         case StringTable.find curr ident of
           SOME defined =>
@@ -211,8 +213,11 @@ structure Resolver :> RESOLVER =
           | Unary (operator, operand) =>
               let val operand = recurse operand in Unary (operator, operand) end
           | Variable (ident, _) =>
-              let val binding = getJumps context ident in
-                Variable (ident, SOME binding)
+              let
+                val binding =
+                  SOME (getJumps context ident) handle UnknownVariable => NONE
+              in
+                Variable (ident, binding)
               end
           | Get (expr, name) => Get (recurse expr, name)
           | Set (expr, ident, value) =>
