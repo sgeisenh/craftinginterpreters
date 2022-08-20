@@ -5,14 +5,16 @@ signature LOX_VALUE =
     | Boolean of bool
     | Number of real
     | String of string
-    | Function of string * (t list -> t)
-    | Class of class
-    | Instance of class * t StringTable.hash_table
+    | Function of string * (t list -> t) * LargeWord.word
+    | Class of class * LargeWord.word
+    | Instance of class * t StringTable.hash_table * LargeWord.word
     and class =
     ClassType of string * (t -> t) StringTable.hash_table * class option
 
     exception ReturnExn of t
     exception RuntimeError of string
+
+    val getId : unit -> LargeWord.word
 
     val findMethod : class -> string -> (t -> t) option
 
