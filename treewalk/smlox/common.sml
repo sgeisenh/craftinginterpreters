@@ -49,10 +49,12 @@ structure Common :> COMMON =
           case merge_positions (lstart, rstart) of
             Position start => start
           | Range {start, ...} => start
+          | Unknown => lstart
         val finish =
           case merge_positions (lfinish, rfinish) of
             Position finish => finish
           | Range {finish, ...} => finish
+          | Unknown => rfinish
       in
         Range {start = start, finish = finish}
       end
@@ -69,11 +71,14 @@ structure Common :> COMMON =
         Position left =>
           (case right of
              Position right => merge_positions (left, right)
-           | Range right => merge_range_and_position (right, left))
+           | Range right => merge_range_and_position (right, left)
+           | Unknown => Unknown)
       | Range left =>
           (case right of
              Position right => merge_range_and_position (left, right)
-           | Range right => merge_ranges (left, right))
+           | Range right => merge_ranges (left, right)
+           | Unknown => Unknown)
+      | Unknown => Unknown
 
     fun merge_locations [] = raise Fail "Can't merge empty locations"
       | merge_locations (first :: rest) = List.foldl merge_location first rest
@@ -198,6 +203,7 @@ structure Common :> COMMON =
           case source_location of
             Position position => render_position_context source position
           | Range range => render_range_context source range
+          | Unknown => "Unknown"
       in
         description ^ "\n" ^ context
       end
