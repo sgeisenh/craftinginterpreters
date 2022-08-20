@@ -5,21 +5,25 @@ structure LoxValue :> LOX_VALUE =
     | Boolean of bool
     | Number of real
     | String of string
-    | Function of string * (t list -> t)
-    | Class of class
-    | Instance of class * t StringTable.hash_table
+    | Function of string * (t list -> t) * LargeWord.word
+    | Class of class * LargeWord.word
+    | Instance of class * t StringTable.hash_table * LargeWord.word
     and class =
     ClassType of string * (t -> t) StringTable.hash_table * class option
 
     exception RuntimeError of string
     exception ReturnExn of t
 
+    val currentId = ref (LargeWord.toLargeWord 0w0)
+
+    fun getId () = ! currentId before currentId := ! currentId + 0w1
+
     fun createInstance cls =
       let
         val fields =
           StringTable.mkTable (256, RuntimeError "Undefined property")
       in
-        Instance (cls, fields)
+        Instance (cls, fields, getId ())
       end
 
     fun findMethod (ClassType (_, methods, superclass)) name =
@@ -34,6 +38,11 @@ structure LoxValue :> LOX_VALUE =
       | eq (Boolean left, Boolean right) = Boolean (left = right)
       | eq (Number left, Number right) = Boolean (Real.== (left, right))
       | eq (String left, String right) = Boolean (left = right)
+      | eq (Function (_, _, leftId), Function (_, _, rightId)) =
+        Boolean (leftId = rightId)
+      | eq (Class (_, leftId), Class (_, rightId)) = Boolean (leftId = rightId)
+      | eq (Instance (_, _, leftId), Instance (_, _, rightId)) =
+        Boolean (leftId = rightId)
       | eq _ = Boolean (false)
 
     fun neq (left, right) =
@@ -78,8 +87,8 @@ structure LoxValue :> LOX_VALUE =
 
     fun call (callee, arguments) =
       case callee of
-        Function (_, function) => function arguments
-      | Class (class) =>
+        Function (_, function, _) => function arguments
+      | Class (class, _) =>
           let val instance = createInstance class in
             case findMethod class "init" of
               NONE =>
@@ -96,7 +105,7 @@ structure LoxValue :> LOX_VALUE =
 
     fun get obj property =
       case obj of
-        Instance (classinfo, fields) =>
+        Instance (classinfo, fields, _) =>
           (case StringTable.find fields property of
              SOME prop => prop
            | NONE =>
@@ -107,7 +116,7 @@ structure LoxValue :> LOX_VALUE =
 
     fun set obj ident value =
       case obj of
-        Instance (cls, fields) => StringTable.insert fields (ident, value)
+        Instance (cls, fields, _) => StringTable.insert fields (ident, value)
       | _ => raise RuntimeError "Only instances have fields"
 
     fun toString value =
@@ -120,7 +129,7 @@ structure LoxValue :> LOX_VALUE =
             String.map (fn #"~" => #"-" | c => c) result
           end
       | String s => s
-      | Function (name, _) => "<" ^ name ^ ">"
-      | Class (ClassType (name, _, _)) => name
-      | Instance (ClassType (cls, _, _), _) => cls ^ " instance"
+      | Function (name, _, _) => "<" ^ name ^ ">"
+      | Class (ClassType (name, _, _), _) => name
+      | Instance (ClassType (cls, _, _), _, _) => cls ^ " instance"
   end

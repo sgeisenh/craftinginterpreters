@@ -1,0 +1,14 @@
+class Foo {
+  foo() {}
+}
+
+var bar = Foo();
+var barfoo = bar.foo;
+
+print barfoo == barfoo;
+print bar.foo == bar.foo;
+
+fun foo() {}
+
+bar.foo = foo;
+print bar.foo == bar.foo;

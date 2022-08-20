@@ -90,7 +90,7 @@ structure Interpreter =
             let
               val superclass =
                 case Environment.get environment "super" of
-                  LoxValue.Class superclass => superclass
+                  LoxValue.Class (superclass, _) => superclass
                 | _ => raise Fail "Unreachable."
               val method =
                 case LoxValue.findMethod superclass method of
@@ -122,7 +122,7 @@ structure Interpreter =
                     let
                       val superclass =
                         case evaluateExpr environment superclass of
-                          LoxValue.Class superclass => superclass
+                          LoxValue.Class (superclass, _) => superclass
                         | _ => raise Fail "Superclass must be a class."
                     in
                       SOME superclass
@@ -135,7 +135,9 @@ structure Interpreter =
                       val methodEnvironment = Environment.makeNested environment
                       val () =
                         Environment.declare methodEnvironment
-                          ("super", LoxValue.Class superclass)
+                          ( "super"
+                          , LoxValue.Class (superclass, LoxValue.getId ())
+                          )
                     in
                       methodEnvironment
                     end
@@ -165,7 +167,9 @@ structure Interpreter =
               Environment.declare environment
                 ( name
                 , LoxValue.Class
-                    (LoxValue.ClassType (name, methodTable, superclass))
+                    ( LoxValue.ClassType (name, methodTable, superclass)
+                    , LoxValue.getId ()
+                    )
                 )
             end
         | Expression expr => ignore (evaluateExpr environment expr)
@@ -223,7 +227,7 @@ structure Interpreter =
               )
             end
       in
-        (name, LoxValue.Function ("fn " ^ name, function))
+        (name, LoxValue.Function ("fn " ^ name, function, LoxValue.getId ()))
       end
 
     fun interpret environment print =

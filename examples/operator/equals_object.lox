@@ -1,0 +1,7 @@
+class Foo {}
+
+var foo = Foo();
+var bar = Foo();
+
+print foo == foo;
+print foo == bar;
