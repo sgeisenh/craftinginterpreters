@@ -89,8 +89,8 @@ structure LoxValue :> LOX_VALUE =
                      raise
                        RuntimeError "Calling default constructor with arguments")
             | SOME constructor =>
-                (call (constructor instance, arguments); instance) handle
-                ReturnExn _ => instance
+                (call (constructor instance, arguments); instance)
+                  handle ReturnExn _ => instance
           end
       | _ => raise RuntimeError "can only call functions."
 
