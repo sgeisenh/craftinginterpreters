@@ -1,10 +1,10 @@
 #![feature(is_some_with)]
 
-use std::{error::Error, fmt};
-
+use error::LoxError;
 use phf::phf_map;
+use serde::Serialize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum TokenType<'a> {
     LeftParen,
     RightParen,
@@ -47,7 +47,7 @@ pub enum TokenType<'a> {
     Eof,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Token<'a> {
     pub r#type: TokenType<'a>,
     pub line: usize,
@@ -56,35 +56,8 @@ pub struct Token<'a> {
 #[derive(Debug)]
 pub struct Scanner<'a> {
     source: &'a str,
-    tokens: Vec<Token<'a>>,
     current_line: usize,
-}
-
-#[derive(Debug)]
-pub struct ScannerError {
-    line: usize,
-    details: String,
-}
-
-impl ScannerError {
-    fn new(line: usize, msg: impl Into<String>) -> Self {
-        Self {
-            line,
-            details: msg.into(),
-        }
-    }
-}
-
-impl fmt::Display for ScannerError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[line {}] Error: {}", self.line, self.details)
-    }
-}
-
-impl Error for ScannerError {
-    fn description(&self) -> &str {
-        &self.details
-    }
+    exhausted: bool,
 }
 
 static KEYWORDS: phf::Map<&'static str, TokenType<'static>> = phf_map! {
@@ -110,117 +83,19 @@ impl<'a> Scanner<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
             source,
-            tokens: Vec::new(),
             current_line: 1,
+            exhausted: false,
         }
-    }
-
-    pub fn scan_tokens(mut self) -> Result<Vec<Token<'a>>, ScannerError> {
-        while !self.is_at_end() {
-            self.scan_token()?;
-        }
-        Ok(self.tokens)
     }
 
     fn is_at_end(&self) -> bool {
         self.source.is_empty()
     }
 
-    fn scan_token(&mut self) -> Result<(), ScannerError> {
-        let c = self.peek().unwrap();
-        match c {
-            '(' => self.munch_token(TokenType::LeftParen),
-            ')' => self.munch_token(TokenType::RightParen),
-            '{' => self.munch_token(TokenType::LeftBrace),
-            '}' => self.munch_token(TokenType::RightBrace),
-            ',' => self.munch_token(TokenType::Comma),
-            '.' => self.munch_token(TokenType::Dot),
-            '-' => self.munch_token(TokenType::Minus),
-            '+' => self.munch_token(TokenType::Plus),
-            ';' => self.munch_token(TokenType::Semicolon),
-            '*' => self.munch_token(TokenType::Star),
-            '!' => {
-                self.advance();
-                if self.mtch('=') {
-                    self.add_token(TokenType::BangEqual)
-                } else {
-                    self.add_token(TokenType::Bang)
-                }
-            }
-            '=' => {
-                self.advance();
-                if self.mtch('=') {
-                    self.add_token(TokenType::EqualEqual)
-                } else {
-                    self.add_token(TokenType::Equal)
-                }
-            }
-            '<' => {
-                self.advance();
-                if self.mtch('=') {
-                    self.add_token(TokenType::LessEqual)
-                } else {
-                    self.add_token(TokenType::Less)
-                }
-            }
-            '>' => {
-                self.advance();
-                if self.mtch('=') {
-                    self.add_token(TokenType::GreaterEqual)
-                } else {
-                    self.add_token(TokenType::Greater)
-                }
-            }
-            '/' => {
-                self.advance();
-                if self.mtch('/') {
-                    while !self.pmtch('\n') && !self.is_at_end() {
-                        self.advance();
-                    }
-                } else {
-                    self.add_token(TokenType::Slash);
-                }
-            }
-            ' ' | '\r' | '\t' => {
-                self.advance();
-            }
-            '\n' => {
-                self.advance();
-                self.current_line += 1;
-            }
-            '"' => {
-                self.advance();
-                self.string()?;
-            }
-            _ => {
-                if c.is_ascii_digit() {
-                    self.number();
-                } else if is_alpha(c) {
-                    self.identifier();
-                } else {
-                    return self.error("Unexpected character.");
-                }
-            }
-        }
-        Ok(())
-    }
-
     fn advance(&mut self) -> char {
         let c = self.source.chars().next().unwrap();
         self.source = &self.source[1..];
         c
-    }
-
-    fn add_token(&mut self, token_type: TokenType<'a>) {
-        self.tokens.push(Token {
-            r#type: token_type,
-            line: self.current_line,
-        })
-    }
-
-    fn munch_token(&mut self, token_type: TokenType<'a>) {
-        self.advance();
-        self.add_token(token_type);
     }
 
     fn mtch(&mut self, c: char) -> bool {
@@ -239,11 +114,11 @@ impl<'a> Scanner<'a> {
         self.peek().is_some_and(|&inner| inner == c)
     }
 
-    fn error<T>(&self, details: &str) -> Result<T, ScannerError> {
-        Err(ScannerError::new(self.current_line, details))
+    fn error<T>(&self, details: &str) -> Result<T, LoxError> {
+        Err(LoxError::new(self.current_line, details))
     }
 
-    fn string(&mut self) -> Result<(), ScannerError> {
+    fn string(&mut self) -> Result<TokenType<'a>, LoxError> {
         match self.source.chars().position(|c| c == '"') {
             None => self.error("Unterminated string."),
             Some(idx) => {
@@ -251,14 +126,13 @@ impl<'a> Scanner<'a> {
                 let num_newlines = value.chars().filter(|&c| c == '\n').count();
                 self.current_line += num_newlines;
                 let token = TokenType::String(value);
-                self.add_token(token);
                 self.source = &self.source[idx + 1..];
-                Ok(())
+                Ok(token)
             }
         }
     }
 
-    fn number(&mut self) {
+    fn number(&mut self) -> TokenType<'static> {
         let mut idx = self
             .source
             .chars()
@@ -277,21 +151,159 @@ impl<'a> Scanner<'a> {
                 .unwrap()
                 + 1;
         }
-        self.add_token(TokenType::Number(self.source[..idx].parse().unwrap()));
+        let result = TokenType::Number(self.source[..idx].parse().unwrap());
         self.source = &self.source[idx..];
+        result
     }
 
-    fn identifier(&mut self) {
-        let (ident, rest) = self
-            .source
-            .split_once(|c: char| !is_alphanumeric(c))
-            .unwrap_or((self.source, ""));
-        let token_type = KEYWORDS
+    fn identifier(&mut self) -> TokenType<'a> {
+        let (ident, source) =
+            if let Some(idx) = self.source.chars().position(|c| !is_alphanumeric(c)) {
+                (
+                    self.source.get(..idx).unwrap(),
+                    self.source.get(idx..).unwrap(),
+                )
+            } else {
+                (self.source, "")
+            };
+        self.source = source;
+        KEYWORDS
             .get(ident)
             .cloned()
-            .unwrap_or(TokenType::Identifier(ident));
-        self.add_token(token_type);
-        self.source = rest;
+            .unwrap_or(TokenType::Identifier(ident))
+    }
+}
+
+impl<'a> Iterator for Scanner<'a> {
+    type Item = Result<Token<'a>, LoxError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.exhausted {
+            return None;
+        }
+        if self.is_at_end() {
+            self.exhausted = true;
+            return Some(Ok(Token {
+                r#type: TokenType::Eof,
+                line: self.current_line,
+            }));
+        }
+        let c = self.peek().unwrap();
+        let token_type = match c {
+            '(' => {
+                self.advance();
+                TokenType::LeftParen
+            }
+            ')' => {
+                self.advance();
+                TokenType::RightParen
+            }
+            '{' => {
+                self.advance();
+                TokenType::LeftBrace
+            }
+            '}' => {
+                self.advance();
+                TokenType::RightBrace
+            }
+            ',' => {
+                self.advance();
+                TokenType::Comma
+            }
+            '.' => {
+                self.advance();
+                TokenType::Dot
+            }
+            '-' => {
+                self.advance();
+                TokenType::Minus
+            }
+            '+' => {
+                self.advance();
+                TokenType::Plus
+            }
+            ';' => {
+                self.advance();
+                TokenType::Semicolon
+            }
+            '*' => {
+                self.advance();
+                TokenType::Star
+            }
+            '!' => {
+                self.advance();
+                if self.mtch('=') {
+                    TokenType::BangEqual
+                } else {
+                    TokenType::Bang
+                }
+            }
+            '=' => {
+                self.advance();
+                if self.mtch('=') {
+                    TokenType::EqualEqual
+                } else {
+                    TokenType::Equal
+                }
+            }
+            '<' => {
+                self.advance();
+                if self.mtch('=') {
+                    TokenType::LessEqual
+                } else {
+                    TokenType::Less
+                }
+            }
+            '>' => {
+                self.advance();
+                if self.mtch('=') {
+                    TokenType::GreaterEqual
+                } else {
+                    TokenType::Greater
+                }
+            }
+            '/' => {
+                self.advance();
+                if self.mtch('/') {
+                    while !self.pmtch('\n') && !self.is_at_end() {
+                        self.advance();
+                    }
+                    return self.next();
+                } else {
+                    TokenType::Slash
+                }
+            }
+            ' ' | '\r' | '\t' => {
+                self.advance();
+                return self.next();
+            }
+            '\n' => {
+                self.advance();
+                self.current_line += 1;
+                return self.next();
+            }
+            '"' => {
+                self.advance();
+                match self.string() {
+                    Ok(it) => it,
+                    Err(err) => return Some(Err(err)),
+                }
+            }
+            _ => {
+                if c.is_ascii_digit() {
+                    self.number()
+                } else if is_alpha(c) {
+                    self.identifier()
+                } else {
+                    self.advance();
+                    return Some(self.error("Unexpected character."));
+                }
+            }
+        };
+        Some(Ok(Token {
+            r#type: token_type,
+            line: self.current_line,
+        }))
     }
 }
 

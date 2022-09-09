@@ -1,5 +1,5 @@
 [package]
-name = "interpreter"
+name = "parser"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,6 +8,4 @@ edition = "2021"
 [dependencies]
 scanner = { path = "../scanner" }
 error = { path = "../error" }
-parser = { path = "../parser" }
-serde = { version = "1.0.144", features = ["derive", "rc"] }
-serde-lexpr = "0.1.2"
+serde = { version = "1.0.144", features = ["derive"] }
