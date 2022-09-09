@@ -2,8 +2,8 @@ use std::{collections::HashMap, fmt::Display, rc::Rc};
 
 use error::LoxError;
 use parser::{
-    AssignExpr, BinOp, BinaryExpr, BlockStmt, Expr, ExprStmt, GroupingExpr, LiteralExpr, Parser,
-    PrintStmt, Stmt, UnaryExpr, VarStmt, VariableExpr,
+    AssignExpr, BinOp, BinaryExpr, BlockStmt, Expr, ExprStmt, GroupingExpr, IfStmt, LiteralExpr,
+    Parser, PrintStmt, Stmt, UnaryExpr, VarStmt, VariableExpr, WhileStmt,
 };
 use scanner::Scanner;
 use serde::Serialize;
@@ -46,7 +46,7 @@ impl Environment {
     }
 
     fn assign(&mut self, name: &str, value: Rc<LoxValue>) -> Result<(), LoxError> {
-        match self.0.last_mut().unwrap().get_mut(name) {
+        match self.0.iter_mut().rev().find_map(|ctx| ctx.get_mut(name)) {
             Some(v) => {
                 *v = value;
                 Ok(())
@@ -71,7 +71,7 @@ impl Environment {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct Interpreter {
     environment: Environment,
 }
@@ -87,6 +87,25 @@ impl Evalable for BinaryExpr {
             operator,
             right,
         } = self;
+        match operator {
+            BinOp::Or => {
+                let left = left.eval(interpreter)?;
+                return if bool::from(&*left) {
+                    Ok(left)
+                } else {
+                    Ok(right.eval(interpreter)?)
+                };
+            }
+            BinOp::And => {
+                let left = left.eval(interpreter)?;
+                return if !bool::from(&*left) {
+                    Ok(left)
+                } else {
+                    Ok(right.eval(interpreter)?)
+                };
+            }
+            _ => (),
+        };
         let left = &*left.eval(interpreter)?;
         let right = &*right.eval(interpreter)?;
         Ok(Rc::new(match operator {
@@ -127,8 +146,7 @@ impl Evalable for BinaryExpr {
                 (LoxValue::Number(left), LoxValue::Number(right)) => LoxValue::Bool(left <= right),
                 _ => return Err(LoxError::new(0, "Type error")),
             },
-            BinOp::And => todo!(),
-            BinOp::Or => todo!(),
+            _ => panic!("Unreachable"),
         }))
     }
 }
@@ -231,6 +249,27 @@ impl Execable for BlockStmt {
     }
 }
 
+impl Execable for IfStmt {
+    fn exec(&self, interpreter: &mut Interpreter) -> Result<(), LoxError> {
+        if bool::from(&*self.condition.eval(interpreter)?) {
+            self.then_branch.exec(interpreter)
+        } else if let Some(else_branch) = &self.else_branch {
+            else_branch.exec(interpreter)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl Execable for WhileStmt {
+    fn exec(&self, interpreter: &mut Interpreter) -> Result<(), LoxError> {
+        while bool::from(&*self.condition.eval(interpreter)?) {
+            self.body.exec(interpreter)?;
+        }
+        Ok(())
+    }
+}
+
 impl Execable for Stmt {
     fn exec(&self, interpreter: &mut Interpreter) -> Result<(), LoxError> {
         match self {
@@ -238,6 +277,8 @@ impl Execable for Stmt {
             Stmt::Print(s) => s.exec(interpreter),
             Stmt::Var(s) => s.exec(interpreter),
             Stmt::Block(s) => s.exec(interpreter),
+            Stmt::If(s) => s.exec(interpreter),
+            Stmt::While(s) => s.exec(interpreter),
         }
     }
 }

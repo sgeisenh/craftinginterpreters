@@ -184,11 +184,38 @@ impl From<BlockStmt> for Stmt {
 }
 
 #[derive(Debug, Serialize)]
+pub struct IfStmt {
+    pub condition: Expr,
+    pub then_branch: Box<Stmt>,
+    pub else_branch: Option<Box<Stmt>>,
+}
+
+impl From<IfStmt> for Stmt {
+    fn from(stmt: IfStmt) -> Self {
+        Self::If(stmt)
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct WhileStmt {
+    pub condition: Expr,
+    pub body: Box<Stmt>,
+}
+
+impl From<WhileStmt> for Stmt {
+    fn from(stmt: WhileStmt) -> Self {
+        Self::While(stmt)
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub enum Stmt {
     Expression(ExprStmt),
     Print(PrintStmt),
     Var(VarStmt),
     Block(BlockStmt),
+    If(IfStmt),
+    While(WhileStmt),
 }
 
 pub struct Parser<'a> {
@@ -297,6 +324,18 @@ impl<'a> Parser<'a> {
 
     fn statement(&mut self) -> Result<Stmt, LoxError> {
         match self.peek().r#type {
+            TokenType::For => {
+                self.advance();
+                self.for_statement()
+            }
+            TokenType::While => {
+                self.advance();
+                self.while_statement()
+            }
+            TokenType::If => {
+                self.advance();
+                self.if_statement()
+            }
             TokenType::Print => {
                 self.advance();
                 self.print_statement()
@@ -308,6 +347,83 @@ impl<'a> Parser<'a> {
             }
             _ => self.expression_statement(),
         }
+    }
+
+    fn for_statement(&mut self) -> Result<Stmt, LoxError> {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'for'.")?;
+        let initializer = match self.peek().r#type {
+            TokenType::Semicolon => {
+                self.advance();
+                None
+            }
+            TokenType::Var => {
+                self.advance();
+                Some(self.var_declaration()?)
+            }
+            _ => Some(self.expression_statement()?),
+        };
+        let condition = match self.peek().r#type {
+            TokenType::Semicolon => None,
+            _ => Some(self.expression()?),
+        };
+        self.consume(TokenType::Semicolon, "Expect ';' after loop condition.")?;
+        let increment = match self.peek().r#type {
+            TokenType::RightParen => None,
+            _ => Some(self.expression()?),
+        };
+        self.consume(TokenType::RightParen, "Expect ')' after for clauses.")?;
+
+        let body = self.statement()?;
+        let body = match increment {
+            Some(expr) => BlockStmt {
+                statements: vec![body, ExprStmt { expr }.into()],
+            }
+            .into(),
+            None => body,
+        };
+        let condition = condition.unwrap_or(LiteralExpr::True.into());
+        let body = WhileStmt {
+            condition,
+            body: Box::new(body),
+        }
+        .into();
+        let body = match initializer {
+            Some(initializer) => BlockStmt {
+                statements: vec![initializer, body],
+            }
+            .into(),
+            None => body,
+        };
+
+        Ok(body)
+    }
+
+    fn while_statement(&mut self) -> Result<Stmt, LoxError> {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'while'.")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expect ')' after while condition.")?;
+
+        let body = Box::new(self.statement()?);
+        Ok(WhileStmt { condition, body }.into())
+    }
+
+    fn if_statement(&mut self) -> Result<Stmt, LoxError> {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'if'.")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expect ')' after if condition.")?;
+
+        let then_branch = Box::new(self.statement()?);
+        let else_branch = if self.mtch(&[TokenType::Else]) {
+            Some(Box::new(self.statement()?))
+        } else {
+            None
+        };
+        Ok(IfStmt {
+            condition,
+            then_branch,
+            else_branch,
+        }
+        .into())
     }
 
     fn print_statement(&mut self) -> Result<Stmt, LoxError> {
@@ -336,7 +452,7 @@ impl<'a> Parser<'a> {
     }
 
     fn assignment(&mut self) -> Result<Expr, LoxError> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
         if self.mtch(&[TokenType::Equal]) {
             let value = self.assignment()?;
             return match expr {
@@ -366,6 +482,14 @@ impl<'a> Parser<'a> {
             .into();
         }
         Ok(expr)
+    }
+
+    fn or(&mut self) -> Result<Expr, LoxError> {
+        self.binops(&[TokenType::Or], Self::and)
+    }
+
+    fn and(&mut self) -> Result<Expr, LoxError> {
+        self.binops(&[TokenType::And], Self::equality)
     }
 
     fn equality(&mut self) -> Result<Expr, LoxError> {
