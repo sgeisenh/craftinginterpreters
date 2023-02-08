@@ -1,6 +1,6 @@
+use anyhow::Result;
 use clap::Parser;
 use interpreter::Interpreter;
-use std::error::Error;
 use std::fs;
 use std::io::{stdin, Write};
 
@@ -14,13 +14,13 @@ struct Cli {
     script: Option<String>,
 }
 
-fn run_file(filename: &str) -> Result<(), Box<dyn Error>> {
+fn run_file(filename: &str) -> Result<()> {
     let input = fs::read_to_string(filename)?;
     Interpreter::new().run(&input)?;
     Ok(())
 }
 
-fn run_prompt() -> Result<(), Box<dyn Error>> {
+fn run_prompt() -> Result<()> {
     let mut buffer = String::new();
     let mut interpreter = Interpreter::new();
     loop {
@@ -37,7 +37,7 @@ fn run_prompt() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.script {
         Some(filename) => run_file(&filename),
